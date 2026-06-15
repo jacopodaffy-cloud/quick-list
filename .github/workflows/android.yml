@@ -32,6 +32,11 @@ jobs:
       - name: Install required SDK packages
         run: yes | sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
+      - name: Prepare web assets
+        run: |
+          mkdir -p www
+          cp index.html app.css app.js manifest.webmanifest sw.js icon.svg icon-maskable.svg icon-192.png icon-512.png www/
+
       - name: Add Android platform (Capacitor)
         run: npx cap add android
 
