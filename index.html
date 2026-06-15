@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#F5F6F8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0D0E12" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="QuickList">
+  <meta name="description" content="QuickList — fast, premium list-making. Each list is a colour. Voice, drag to reorder, share to WhatsApp.">
+  <title>QuickList — lists, by color</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-maskable.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="app.css?v=2">
+</head>
+<body>
+<noscript><div style="padding:40px;font-family:system-ui">QuickList needs JavaScript to run.</div></noscript>
+<div id="app">
+
+  <!-- ============ HOME ============ -->
+  <main id="page-home" class="page">
+    <header class="home-head">
+      <div>
+        <h1 class="wordmark">Quick<span class="wm-2">list</span><span class="blob"></span></h1>
+        <p class="home-sub" id="home-sub"></p>
+      </div>
+      <button class="icon-btn" id="sort-btn" aria-label="Sort and filter"></button>
+    </header>
+
+    <div class="search-wrap" id="search-wrap">
+      <span class="search-ic" id="search-ic"></span>
+      <input id="home-search" placeholder="Search lists & items…" autocomplete="off" enterkeyhint="search">
+      <button class="search-clear" id="search-clear" aria-label="Clear search" hidden></button>
+    </div>
+
+    <div class="grid" id="grid"></div>
+    <button id="fab" aria-label="New list"><span id="fab-icon"></span>New list</button>
+  </main>
+
+  <!-- ============ LIST DETAIL ============ -->
+  <section id="page-detail" class="page" hidden>
+    <header class="detail-head">
+      <button class="icon-btn" id="detail-back" aria-label="Back"></button>
+      <div class="detail-tools">
+        <button class="icon-btn" id="detail-copy" aria-label="Copy as text"></button>
+        <button class="icon-btn" id="detail-whatsapp" aria-label="Share on WhatsApp"></button>
+        <button class="icon-btn" id="detail-menu" aria-label="List options"></button>
+      </div>
+    </header>
+
+    <div class="title-block">
+      <input id="detail-title" class="title-input" placeholder="Untitled list" maxlength="80" autocomplete="off" aria-label="List title (optional)">
+      <button class="title-meta" id="detail-meta" aria-label="Change colour"></button>
+    </div>
+
+    <div class="progress" id="progress"><i id="progress-fill"></i></div>
+
+    <div id="items"></div>
+    <div id="detail-empty"></div>
+    <div class="detail-bottom-space"></div>
+
+    <div class="addbar-wrap">
+      <p class="voice-hint" id="voice-hint"></p>
+      <form id="addbar">
+        <input id="add-input" placeholder="Add an item…  (paste a list, or “milk x2”)" enterkeyhint="done" autocomplete="off">
+        <button type="button" class="mic-btn" id="mic" aria-label="Dictate by voice"></button>
+        <button type="submit" class="add-send" id="add-send" aria-label="Add"></button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ============ CHROME ============ -->
+  <div id="backdrop" hidden></div>
+  <div id="sheet-root"></div>
+  <div id="toast-root"></div>
+</div>
+<script src="app.js?v=2"></script>
+</body>
+</html>

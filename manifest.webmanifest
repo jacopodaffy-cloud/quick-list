@@ -1,0 +1,18 @@
+{
+  "id": "/quicklist/",
+  "name": "QuickList — lists, by color",
+  "short_name": "QuickList",
+  "description": "Fast, premium list-making. Each list is a colour. Voice input, drag to reorder, share to WhatsApp, copy as text.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F6F8",
+  "theme_color": "#5A63E0",
+  "categories": ["productivity", "utilities", "lifestyle"],
+  "lang": "en",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
