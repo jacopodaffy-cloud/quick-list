@@ -1,20 +1,19 @@
 {
   "packageId": "app.quicklist.twa",
-  "host": "REPLACE_WITH_YOUR_DOMAIN",
+  "host": "jacopodaffy-cloud.github.io",
   "name": "QuickList",
   "launcherName": "QuickList",
   "display": "standalone",
   "themeColor": "#5A63E0",
   "navigationColor": "#5A63E0",
   "backgroundColor": "#F5F6F8",
-  "startUrl": "https://REPLACE_WITH_YOUR_DOMAIN/",
-  "webManifestUrl": "https://REPLACE_WITH_YOUR_DOMAIN/manifest.webmanifest",
-  "iconUrl": "https://REPLACE_WITH_YOUR_DOMAIN/icon-maskable.svg",
-  "maskableIconUrl": "https://REPLACE_WITH_YOUR_DOMAIN/icon-maskable.svg",
+  "startUrl": "https://jacopodaffy-cloud.github.io/quick-list/",
+  "webManifestUrl": "https://jacopodaffy-cloud.github.io/quick-list/manifest.webmanifest",
+  "iconUrl": "https://jacopodaffy-cloud.github.io/quick-list/icon-192.png",
+  "maskableIconUrl": "https://jacopodaffy-cloud.github.io/quick-list/icon-512.png",
   "orientation": "portrait",
   "fallbackType": "customtabs",
   "appVersionName": "2.0.0",
   "appVersionCode": 2,
-  "shortcuts": [],
-  "_comment": "Replace REPLACE_WITH_YOUR_DOMAIN with the host you deploy to, then run: bubblewrap init --manifest <webManifestUrl>"
+  "shortcuts": []
 }
