@@ -16,11 +16,13 @@
    and cross-device cloud sync.
    ============================================================ */
 window.QUICKLIST_CONFIG = {
-  firebase: null
-  // firebase: {
-  //   apiKey: "AIza...",
-  //   authDomain: "your-app.firebaseapp.com",
-  //   projectId: "your-app",
-  //   appId: "1:...:web:..."
-  // }
+  firebase: {
+    apiKey: "AIzaSyCqpquRDztkMRJ3HHU-Uuxuh9-xU48pUmw",
+    authDomain: "qwicklist-d8ee6.firebaseapp.com",
+    projectId: "qwicklist-d8ee6",
+    storageBucket: "qwicklist-d8ee6.firebasestorage.app",
+    messagingSenderId: "491197590751",
+    appId: "1:491197590751:web:25352a36ab480b3d104d6a",
+    measurementId: "G-WZHQT83MXS"
+  }
 };
