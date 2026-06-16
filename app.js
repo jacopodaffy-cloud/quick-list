@@ -238,6 +238,14 @@ async function ensureCloud() {
   ]);
   const fbApp = app.initializeApp(CFG.firebase);
   cloud = { authm, fs, auth: authm.getAuth(fbApp), db: fs.getFirestore(fbApp) };
+  // Handle redirect result after Google sign-in on mobile
+  try {
+    const result = await authm.getRedirectResult(cloud.auth);
+    if (result && result.user) {
+      const u = result.user;
+      await activateSession({ uid: u.uid, email: u.email || '', username: u.displayName || (u.email || 'You').split('@')[0], provider: 'cloud' }, { adoptGuest: true });
+    }
+  } catch (e) { /* ignore */ }
   return cloud;
 }
 async function cloudPull(uid) {
@@ -305,7 +313,14 @@ function endSession() {
 /* ---- auth actions invoked by the UI ---- */
 async function doGoogle() {
   const c = await ensureCloud();
-  const res = await c.authm.signInWithPopup(c.auth, new c.authm.GoogleAuthProvider());
+  const provider = new c.authm.GoogleAuthProvider();
+  // Use redirect on mobile/WebView, popup on desktop
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.Capacitor;
+  if (isMobile) {
+    await c.authm.signInWithRedirect(c.auth, provider);
+    return;
+  }
+  const res = await c.authm.signInWithPopup(c.auth, provider);
   const u = res.user;
   await activateSession({ uid: u.uid, email: u.email || '', username: u.displayName || (u.email || 'You').split('@')[0], provider: 'cloud' }, { adoptGuest: true });
 }

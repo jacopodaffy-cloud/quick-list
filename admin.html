@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuickList Admin</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f0f; color: #e0e0e0; min-height: 100vh; }
+    .header { background: #1a1a2e; padding: 20px 32px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a2a4a; }
+    .header h1 { font-size: 1.4rem; font-weight: 700; color: #7c83ff; }
+    .header span { font-size: 0.85rem; color: #888; }
+    .container { max-width: 1100px; margin: 32px auto; padding: 0 24px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .stat { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 20px; }
+    .stat-value { font-size: 2rem; font-weight: 700; color: #7c83ff; }
+    .stat-label { font-size: 0.8rem; color: #888; margin-top: 4px; }
+    .section-title { font-size: 1rem; font-weight: 600; color: #ccc; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; background: #1a1a2e; border-radius: 12px; overflow: hidden; }
+    th { background: #16213e; padding: 12px 16px; text-align: left; font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+    td { padding: 12px 16px; border-top: 1px solid #2a2a4a; font-size: 0.9rem; }
+    tr:hover td { background: #16213e; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 0.75rem; background: #7c83ff22; color: #7c83ff; }
+    .loading { text-align: center; padding: 60px; color: #888; }
+    .login-wall { display: flex; align-items: center; justify-content: center; min-height: 100vh; flex-direction: column; gap: 16px; }
+    .btn { padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 0.95rem; font-weight: 600; background: #7c83ff; color: white; }
+    .btn:hover { background: #6970e8; }
+    .error { color: #ff6b6b; font-size: 0.9rem; }
+    .refresh { background: none; border: 1px solid #2a2a4a; color: #888; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; }
+    .refresh:hover { border-color: #7c83ff; color: #7c83ff; }
+  </style>
+</head>
+<body>
+
+<div id="login-wall" class="login-wall" style="display:none">
+  <div style="font-size:2rem">🔐</div>
+  <h2 style="color:#7c83ff">Admin Panel</h2>
+  <p style="color:#888">Accedi con l'account admin</p>
+  <button class="btn" id="login-btn">Accedi con Google</button>
+  <p class="error" id="login-error"></p>
+</div>
+
+<div id="app" style="display:none">
+  <div class="header">
+    <h1>⚡ QuickList Admin</h1>
+    <div style="display:flex;align-items:center;gap:12px">
+      <button class="refresh" id="refresh-btn">↻ Aggiorna</button>
+      <span id="admin-email"></span>
+    </div>
+  </div>
+  <div class="container">
+    <div class="stats" id="stats">
+      <div class="stat"><div class="stat-value" id="stat-users">—</div><div class="stat-label">Utenti totali</div></div>
+      <div class="stat"><div class="stat-value" id="stat-lists">—</div><div class="stat-label">Liste create</div></div>
+      <div class="stat"><div class="stat-value" id="stat-items">—</div><div class="stat-label">Elementi totali</div></div>
+    </div>
+    <div class="section-title">Utenti registrati</div>
+    <div id="loading" class="loading">Caricamento...</div>
+    <table id="user-table" style="display:none">
+      <thead>
+        <tr>
+          <th>Email / Nome</th>
+          <th>UID</th>
+          <th>Liste</th>
+          <th>Elementi</th>
+          <th>Ultimo aggiornamento</th>
+        </tr>
+      </thead>
+      <tbody id="user-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script type="module">
+  const ADMIN_EMAIL = 'jacopodaffy@gmail.com';
+  const FB = 'https://www.gstatic.com/firebasejs/10.12.5/';
+
+  const cfg = {
+    apiKey: "AIzaSyCqpquRDztkMRJ3HHU-Uuxuh9-xU48pUmw",
+    authDomain: "qwicklist-d8ee6.firebaseapp.com",
+    projectId: "qwicklist-d8ee6",
+    storageBucket: "qwicklist-d8ee6.firebasestorage.app",
+    messagingSenderId: "491197590751",
+    appId: "1:491197590751:web:25352a36ab480b3d104d6a"
+  };
+
+  const [appMod, authMod, fsMod] = await Promise.all([
+    import(FB + 'firebase-app.js'),
+    import(FB + 'firebase-auth.js'),
+    import(FB + 'firebase-firestore.js')
+  ]);
+
+  const fbApp = appMod.initializeApp(cfg);
+  const auth = authMod.getAuth(fbApp);
+  const db = fsMod.getFirestore(fbApp);
+
+  authMod.onAuthStateChanged(auth, async user => {
+    if (!user) {
+      document.getElementById('login-wall').style.display = 'flex';
+      document.getElementById('app').style.display = 'none';
+      return;
+    }
+    if (user.email !== ADMIN_EMAIL) {
+      document.getElementById('login-wall').style.display = 'flex';
+      document.getElementById('login-error').textContent = '⛔ Accesso negato: non sei l\'admin.';
+      document.getElementById('login-btn').style.display = 'none';
+      await authMod.signOut(auth);
+      return;
+    }
+    document.getElementById('login-wall').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('admin-email').textContent = user.email;
+    loadUsers();
+  });
+
+  document.getElementById('login-btn').addEventListener('click', async () => {
+    try {
+      await authMod.signInWithPopup(auth, new authMod.GoogleAuthProvider());
+    } catch(e) {
+      document.getElementById('login-error').textContent = e.message;
+    }
+  });
+
+  document.getElementById('refresh-btn').addEventListener('click', loadUsers);
+
+  async function loadUsers() {
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('user-table').style.display = 'none';
+    try {
+      const snap = await fsMod.getDocs(fsMod.collection(db, 'users'));
+      const users = [];
+      snap.forEach(doc => users.push({ uid: doc.id, ...doc.data() }));
+
+      let totalLists = 0, totalItems = 0;
+      const tbody = document.getElementById('user-tbody');
+      tbody.innerHTML = '';
+
+      users.forEach(u => {
+        const lists = u.lists || [];
+        const items = lists.reduce((acc, l) => acc + (l.items ? l.items.length : 0), 0);
+        totalLists += lists.length;
+        totalItems += items;
+
+        const updated = u.updatedAt ? new Date(u.updatedAt).toLocaleString('it-IT') : '—';
+        const name = u.displayName || u.email || u.uid;
+
+        tbody.innerHTML += `<tr>
+          <td>${name}</td>
+          <td style="font-family:monospace;font-size:0.75rem;color:#888">${u.uid}</td>
+          <td><span class="badge">${lists.length}</span></td>
+          <td><span class="badge">${items}</span></td>
+          <td style="color:#888">${updated}</td>
+        </tr>`;
+      });
+
+      document.getElementById('stat-users').textContent = users.length;
+      document.getElementById('stat-lists').textContent = totalLists;
+      document.getElementById('stat-items').textContent = totalItems;
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('user-table').style.display = 'table';
+    } catch(e) {
+      document.getElementById('loading').textContent = '❌ Errore: ' + e.message;
+    }
+  }
+</script>
+</body>
+</html>
