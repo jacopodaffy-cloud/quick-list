@@ -63,6 +63,14 @@ State shape:
   lists: [ { id, title, color, pinned, tidy, items: [ { id, text, done, qty } ], createdAt, updatedAt } ] }
 ```
 
+## Accounts & sync (new)
+
+- **Guest by default** — the app is fully usable with no account; nothing leaves the device.
+- **Sign in** from the avatar in the home header: Google, or email/username + password, plus a create-account flow.
+- **Device accounts work immediately** — passwords are PBKDF2-hashed via Web Crypto and never stored in clear; each account's lists are kept separate.
+- **Cloud sync (optional)** — add your Firebase config to `config.js` to enable Google sign-in and real cross-device sync (sign in on another phone/computer → your lists are there). Setup: [SETUP-ACCOUNTS.md](SETUP-ACCOUNTS.md). Security model & audit: [SECURITY.md](SECURITY.md).
+- **Startup is bulletproof** — the local app renders synchronously first; any cloud/network failure is contained and the app stays usable. Corrupted storage falls back to a safe state (verified).
+
 ## Quality floor
 
 Visible keyboard focus, `prefers-reduced-motion`, dark mode via `prefers-color-scheme`, safe-area insets, 44px+ touch targets, browser-back closes sheets / leaves detail, a fatal-error fallback screen (never a blank page), and content never depends on an animation finishing to be visible. The red swipe-delete layer is gated to swipe gestures only, so it never peeks behind rows.

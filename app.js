@@ -36,11 +36,14 @@ function showFatal(err) {
         <h2 style="margin:8px 0;font-size:20px">Something went wrong</h2>
         <p style="font-size:13px;color:#5A6072;word-break:break-word">${esc(msg)}</p>
         <div style="margin-top:16px;display:flex;gap:8px">
-          <button onclick="location.reload()" style="background:#14161B;color:#fff;border:0;border-radius:999px;padding:12px 20px;font-weight:700;cursor:pointer">Reload</button>
-          <button onclick="localStorage.removeItem('quicklist.v1');location.reload()" style="background:#EEF0F4;border:0;border-radius:999px;padding:12px 20px;font-weight:700;cursor:pointer">Reset data</button>
+          <button id="fatal-reload" style="background:#14161B;color:#fff;border:0;border-radius:999px;padding:12px 20px;font-weight:700;cursor:pointer">Reload</button>
+          <button id="fatal-reset" style="background:#EEF0F4;border:0;border-radius:999px;padding:12px 20px;font-weight:700;cursor:pointer">Reset data</button>
         </div>
       </div>
     </div>`;
+  const r = document.getElementById('fatal-reload'), x = document.getElementById('fatal-reset');
+  if (r) r.addEventListener('click', () => location.reload());
+  if (x) x.addEventListener('click', () => { try { localStorage.removeItem('quicklist.v1'); } catch (e) { } location.reload(); });
 }
 window.addEventListener('error', e => showFatal(e.error || e.message));
 
@@ -67,7 +70,14 @@ const I = {
   broom: ic('<path d="M19.4 4.6 14 10M9 21l-5-5 5.5-5.5a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L9 21ZM4 16l-2 5 5-2"/>'),
   sink: ic('<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>'),
   spark: ic('<path d="M12 2l1.6 5L19 8.5l-4.4 3.2L16 17l-4-3-4 3 1.4-5.3L5 8.5 10.4 7Z"/>'),
+  person: ic('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'),
+  cloudOn: ic('<path d="M7 18a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1.4A3.5 3.5 0 0 1 18 18H7z"/><path d="m9.5 13.5 1.8 1.8 3.5-3.5"/>'),
+  device: ic('<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/>'),
+  refresh: ic('<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/>'),
+  signout: ic('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>'),
+  shield: ic('<path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/>'),
 };
+const GOOGLE_G = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M22.5 12.2c0-.68-.06-1.36-.18-2.02H12v3.83h5.9a5.05 5.05 0 0 1-2.19 3.31v2.74h3.54c2.07-1.91 3.25-4.72 3.25-7.86z"/><path fill="#34A853" d="M12 23c2.94 0 5.42-.97 7.23-2.64l-3.54-2.74c-.98.66-2.24 1.05-3.69 1.05-2.84 0-5.25-1.92-6.11-4.5H2.23v2.83A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.89 14.17a6.6 6.6 0 0 1 0-4.34V7H2.23a11 11 0 0 0 0 9.99l3.66-2.82z"/><path fill="#EA4335" d="M12 4.75c1.6 0 3.04.55 4.18 1.62l3.13-3.13C17.42 1.46 14.94.5 12 .5A11 11 0 0 0 2.23 7l3.66 2.83C6.75 6.67 9.16 4.75 12 4.75z"/></svg>';
 
 /* ====================== 2. Color system ====================== */
 const PALETTE = [
@@ -86,19 +96,37 @@ function applyHue(el, hex) { el.style.setProperty('--c', hex); el.style.setPrope
 const colorIndex = hex => { const i = PALETTE.findIndex(p => p.hex === hex); return i < 0 ? 99 : i; };
 
 /* ====================== 3. Store ====================== */
-const KEY = 'quicklist.v1';
+const KEY = 'quicklist.v1';              // guest (no account) data
+const SESSION_KEY = 'quicklist.session';
+const ACCOUNTS_KEY = 'quicklist.accounts'; // device-local accounts (PBKDF2-hashed)
 let state;            // assigned in init() (avoids TDZ on mkList/mkItem)
 let homeQuery = '';   // runtime search text
+let session = null;   // { uid, email, username, provider } | null  (set in init)
 
-function blank() { return { v: 1, lists: [], nextColor: 0, sort: 'recent', filterColor: null }; }
-function load() {
-  try {
-    const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && Array.isArray(s.lists)) { s.sort = s.sort || 'recent'; if (!('filterColor' in s)) s.filterColor = null; return s; }
-  } catch (e) { }
-  return seed();
+const dataKeyFor = uid => 'quicklist.data.' + uid;
+const activeKey = () => session ? dataKeyFor(session.uid) : KEY;
+
+function blank() { return { v: 1, lists: [], nextColor: 0, sort: 'recent', filterColor: null, updatedAt: Date.now() }; }
+function normalize(s) {
+  if (!s || !Array.isArray(s.lists)) return null;
+  s.v = 1; s.sort = s.sort || 'recent'; if (!('filterColor' in s)) s.filterColor = null;
+  if (typeof s.nextColor !== 'number') s.nextColor = 0;
+  if (typeof s.updatedAt !== 'number') s.updatedAt = Date.now();
+  return s;
 }
-function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { } }
+const readData = key => { try { return normalize(JSON.parse(localStorage.getItem(key))); } catch (e) { return null; } };
+const writeData = (key, s) => { try { localStorage.setItem(key, JSON.stringify(s)); } catch (e) { } };
+
+function load() {
+  const s = readData(activeKey());
+  if (s) return s;
+  return session ? blank() : seed();      // accounts start empty; guest gets the demo
+}
+function save() {
+  state.updatedAt = Date.now();
+  writeData(activeKey(), state);
+  schedulePush();                          // cloud push (no-op unless signed into cloud)
+}
 
 const mkItem = (text, done = false, qty = null) => ({ id: uid(), text, done: !!done, qty: qty && qty > 1 ? qty : null });
 function mkList(color) {
@@ -150,6 +178,266 @@ function seed() {
   ideas.items = ['Bike along the river', 'That new ramen place', 'Finish the book', 'Call mum'].map((t, i) => mkItem(t, i === 3));
   s.lists = [groc, trip, ideas]; s.nextColor = 3;
   return s;
+}
+
+/* ====================== 3b. Accounts & Sync ======================
+   Security: the browser only ever holds the PUBLIC Firebase config
+   (config.js) — never a private/service key. Device-local account
+   passwords are PBKDF2-hashed via Web Crypto (never stored in clear);
+   cloud passwords are handled entirely by Firebase Auth over HTTPS.
+   Cloud data lives at users/{uid}, locked to that uid by Firestore
+   rules (see SECURITY.md).
+   ================================================================ */
+const CFG = (window.QUICKLIST_CONFIG || {});
+const CLOUD_ENABLED = !!(CFG.firebase && CFG.firebase.apiKey);
+let cloud = null, cloudUnsub = null, pushTimer = null, authMode = 'signin', authBusy = false;
+
+const loadSession = () => { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch (e) { return null; } };
+const saveSession = s => { try { s ? localStorage.setItem(SESSION_KEY, JSON.stringify(s)) : localStorage.removeItem(SESSION_KEY); } catch (e) { } };
+const initials = s => { const n = (s.username || s.email || 'You').trim(); const p = n.split(/[\s@._-]+/).filter(Boolean); return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || '·'; };
+
+/* ---- device-local accounts (Web Crypto PBKDF2) ---- */
+const bytesToHex = b => [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+const hexToBytes = h => new Uint8Array(h.match(/.{2}/g).map(x => parseInt(x, 16)));
+async function pbkdf2(password, saltHex) {
+  const salt = saltHex ? hexToBytes(saltHex) : crypto.getRandomValues(new Uint8Array(16));
+  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' }, km, 256);
+  return { salt: bytesToHex(salt), hash: bytesToHex(new Uint8Array(bits)) };
+}
+const readAccounts = () => { try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) || {}; } catch (e) { return {}; } };
+const writeAccounts = a => { try { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(a)); } catch (e) { } };
+const matchUser = (a, id) => !!id && (norm(a.username) === norm(id) || (!!a.email && norm(a.email) === norm(id)));
+
+async function localSignUp({ username, email, password }) {
+  username = (username || '').trim(); email = (email || '').trim();
+  if (username.length < 2) throw new Error('Pick a username (at least 2 characters)');
+  if ((password || '').length < 6) throw new Error('Password needs at least 6 characters');
+  const accts = readAccounts();
+  if (Object.values(accts).some(a => matchUser(a, username) || (email && matchUser(a, email)))) throw new Error('That username or email is already taken');
+  const { salt, hash } = await pbkdf2(password);
+  const u = { uid: 'local_' + uid(), username, email, salt, hash, createdAt: Date.now() };
+  accts[u.uid] = u; writeAccounts(accts);
+  return { uid: u.uid, username, email, provider: 'local' };
+}
+async function localSignIn({ id, password }) {
+  const a = Object.values(readAccounts()).find(x => matchUser(x, id));
+  if (!a) throw new Error('No account found with that username or email');
+  const { hash } = await pbkdf2(password || '', a.salt);
+  if (hash !== a.hash) throw new Error('Wrong password — try again');
+  return { uid: a.uid, username: a.username, email: a.email, provider: 'local' };
+}
+
+/* ---- cloud (Firebase, loaded only when configured) ---- */
+const FB = 'https://www.gstatic.com/firebasejs/10.12.5/';
+async function ensureCloud() {
+  if (cloud) return cloud;
+  if (!CLOUD_ENABLED) throw new Error('Cloud sync is not set up yet');
+  const [app, authm, fs] = await Promise.all([
+    import(FB + 'firebase-app.js'), import(FB + 'firebase-auth.js'), import(FB + 'firebase-firestore.js'),
+  ]);
+  const fbApp = app.initializeApp(CFG.firebase);
+  cloud = { authm, fs, auth: authm.getAuth(fbApp), db: fs.getFirestore(fbApp) };
+  return cloud;
+}
+async function cloudPull(uid) {
+  const c = await ensureCloud();
+  const snap = await c.fs.getDoc(c.fs.doc(c.db, 'users', uid));
+  return snap.exists() ? normalize(snap.data()) : null;
+}
+function schedulePush() {
+  if (!session || session.provider !== 'cloud') return;
+  clearTimeout(pushTimer); pushTimer = setTimeout(cloudPush, 1200);
+}
+async function cloudPush() {
+  if (!session || session.provider !== 'cloud') return;
+  try { const c = await ensureCloud(); await c.fs.setDoc(c.fs.doc(c.db, 'users', session.uid), JSON.parse(JSON.stringify(state))); }
+  catch (e) { /* offline — kept in local cache, retried on next change */ }
+}
+function cloudSubscribe() {
+  if (!session || session.provider !== 'cloud') return;
+  ensureCloud().then(c => {
+    if (cloudUnsub) cloudUnsub();
+    cloudUnsub = c.fs.onSnapshot(c.fs.doc(c.db, 'users', session.uid), snap => {
+      if (!snap.exists()) return;
+      const remote = normalize(snap.data());
+      if (remote && (remote.updatedAt || 0) > (state.updatedAt || 0)) {   // a newer write from another device
+        state = remote; writeData(activeKey(), state);
+        if (!sheetOpen()) rerender();
+      }
+    }, () => { });
+  }).catch(() => { });
+}
+
+/* ---- merge (list-level last-write-wins) + session activation ---- */
+function mergeStates(primary, secondary) {
+  const a = primary || blank(), b = secondary || { lists: [] };
+  const map = new Map();
+  for (const l of [...(a.lists || []), ...(b.lists || [])]) {
+    const ex = map.get(l.id);
+    if (!ex || (l.updatedAt || 0) > (ex.updatedAt || 0)) map.set(l.id, l);
+  }
+  return { ...a, lists: [...map.values()].sort((x, y) => (y.updatedAt || 0) - (x.updatedAt || 0)), updatedAt: Date.now() };
+}
+async function activateSession(user, { adoptGuest = false } = {}) {
+  session = user; saveSession(session);
+  let base = readData(activeKey());                  // this account's cache on this device
+  if (user.provider === 'cloud') {
+    try { base = mergeStates(await cloudPull(user.uid), base); } catch (e) { }
+  }
+  if (!base) base = blank();
+  if (adoptGuest) {                                  // bring the work you did as a guest into a fresh account
+    const guest = readData(KEY);
+    if (guest && guest.lists.length && base.lists.length === 0) base = mergeStates(base, guest);
+  }
+  state = normalize(base) || blank();
+  writeData(activeKey(), state);
+  if (user.provider === 'cloud') { cloudPush(); cloudSubscribe(); }
+  refreshAccountUI();
+}
+function endSession() {
+  if (cloudUnsub) { cloudUnsub(); cloudUnsub = null; }
+  if (cloud && cloud.auth && cloud.auth.currentUser) cloud.authm.signOut(cloud.auth).catch(() => { });
+  session = null; saveSession(null);
+  state = load(); refreshAccountUI();
+}
+
+/* ---- auth actions invoked by the UI ---- */
+async function doGoogle() {
+  const c = await ensureCloud();
+  const res = await c.authm.signInWithPopup(c.auth, new c.authm.GoogleAuthProvider());
+  const u = res.user;
+  await activateSession({ uid: u.uid, email: u.email || '', username: u.displayName || (u.email || 'You').split('@')[0], provider: 'cloud' }, { adoptGuest: true });
+}
+async function doEmailAuth(mode, f) {
+  if (CLOUD_ENABLED) {
+    const c = await ensureCloud();
+    if (mode === 'signup') {
+      const cred = await c.authm.createUserWithEmailAndPassword(c.auth, f.email, f.password);
+      if (f.username) { try { await c.authm.updateProfile(cred.user, { displayName: f.username }); } catch (e) { } }
+      await activateSession({ uid: cred.user.uid, email: f.email, username: f.username || f.email.split('@')[0], provider: 'cloud' }, { adoptGuest: true });
+    } else {
+      const cred = await c.authm.signInWithEmailAndPassword(c.auth, f.id, f.password);
+      const u = cred.user;
+      await activateSession({ uid: u.uid, email: u.email || '', username: u.displayName || (u.email || 'You').split('@')[0], provider: 'cloud' });
+    }
+  } else {
+    const user = mode === 'signup' ? await localSignUp(f) : await localSignIn(f);
+    await activateSession(user, { adoptGuest: mode === 'signup' });
+  }
+}
+
+/* ---- account UI ---- */
+function refreshAccountUI() {
+  const a = $('#avatar'); if (!a) return;
+  if (session) { a.textContent = initials(session); a.classList.add('signed'); }
+  else { a.innerHTML = I.person; a.classList.remove('signed'); }
+}
+function openAccountSheet() {
+  if (session) return openProfileSheet();
+  const signup = authMode === 'signup';
+  openSheet(`
+    <h2 class="sheet-title">${signup ? 'Create your account' : 'Welcome back'}</h2>
+    <p class="sheet-sub">${CLOUD_ENABLED ? 'Save your lists and pick up where you left off on any device.' : 'Keep your lists behind a login on this device. Add cloud config for cross-device sync.'}</p>
+    <button class="btn-google" data-auth="google">${GOOGLE_G}<span>Continue with Google</span></button>
+    <div class="auth-or"><span>or</span></div>
+    <form id="auth-form" class="auth-form" autocomplete="on">
+      ${signup ? `<input class="field" name="username" placeholder="Username" autocomplete="username" required>` : ''}
+      <input class="field" name="id" type="${signup ? 'email' : 'text'}" placeholder="${signup ? 'Email' : (CLOUD_ENABLED ? 'Email' : 'Email or username')}" autocomplete="${signup ? 'email' : 'username'}" ${signup && CLOUD_ENABLED ? 'required' : ''} ${signup ? 'inputmode="email"' : ''}>
+      <input class="field" name="password" type="password" placeholder="Password" autocomplete="${signup ? 'new-password' : 'current-password'}" required>
+      <p class="auth-error" id="auth-error" role="alert"></p>
+      <button class="btn btn-c btn-block" type="submit" id="auth-submit">${signup ? 'Create account' : 'Sign in'}</button>
+    </form>
+    <div class="auth-links">
+      <button class="link" data-auth="toggle">${signup ? 'Have an account? Sign in' : 'New here? Create an account'}</button>
+      ${signup ? '' : `<button class="link" data-auth="forgot">Forgot password?</button>`}
+    </div>
+    <button class="btn btn-ghost btn-block" data-auth="guest">Continue without an account</button>
+    <p class="auth-foot">${I.shield}<span>Passwords are ${CLOUD_ENABLED ? 'handled by Google Firebase' : 'hashed on your device (PBKDF2)'} — never stored in plain text.</span></p>
+  `);
+}
+function openProfileSheet() {
+  const isCloud = session.provider === 'cloud';
+  openSheet(`
+    <div class="acct-head"><span class="acct-avatar">${esc(initials(session))}</span>
+      <div class="acct-id"><div class="acct-name">${esc(session.username || 'You')}</div>${session.email ? `<div class="acct-mail">${esc(session.email)}</div>` : ''}</div></div>
+    <div class="sync-badge ${isCloud ? 'on' : ''}">${isCloud ? I.cloudOn + '<span>Synced across your devices</span>' : I.device + '<span>Saved on this device</span>'}</div>
+    <div class="menu-list">
+      ${isCloud ? `<button class="menu-item" data-auth="sync">${I.refresh} Sync now</button>` : ''}
+      <button class="menu-item danger" data-auth="signout">${I.signout} Sign out</button>
+    </div>
+    ${!isCloud && CLOUD_ENABLED ? '' : (!isCloud ? `<p class="auth-foot">${I.shield}<span>Enable cloud config to sync this account to other devices — see SETUP-ACCOUNTS.md.</span></p>` : '')}
+  `);
+}
+async function handleAuth(kind) {
+  if (kind === 'toggle') { authMode = authMode === 'signin' ? 'signup' : 'signin'; return openAccountSheet(); }
+  if (kind === 'guest') { closeSheet(); return; }
+  if (kind === 'signout') { closeSheet(); endSession(); showHome(false); toast('Signed out'); return; }
+  if (kind === 'sync') {
+    try { const r = await cloudPull(session.uid); if (r) { state = mergeStates(r, state); writeData(activeKey(), state); cloudPush(); rerender(); } toast('Synced'); }
+    catch (e) { toast('Could not sync right now'); }
+    return;
+  }
+  if (kind === 'forgot') {
+    if (!CLOUD_ENABLED) { setAuthError('Password reset needs cloud sync. For a device account, create a new one.'); return; }
+    const email = prompt('Enter your account email to reset the password:');
+    if (!email) return;
+    try { const c = await ensureCloud(); await c.authm.sendPasswordResetEmail(c.auth, email.trim()); toast('Reset email sent'); }
+    catch (e) { setAuthError(humanAuthError(e)); }
+    return;
+  }
+  if (kind === 'google') {
+    if (!CLOUD_ENABLED) { setAuthError('Google sign-in needs cloud setup (one-time). You can still use a device account below.'); return; }
+    setAuthBusy(true);
+    try { await doGoogle(); closeSheet(); showHome(false); toast('Signed in with Google'); }
+    catch (e) { setAuthError(humanAuthError(e)); }
+    setAuthBusy(false);
+  }
+}
+async function handleAuthSubmit(form) {
+  if (authBusy) return;
+  const fd = new FormData(form);
+  const mode = authMode;
+  const f = mode === 'signup'
+    ? { username: (fd.get('username') || '').trim(), email: (fd.get('id') || '').trim(), password: fd.get('password') || '' }
+    : { id: (fd.get('id') || '').trim(), password: fd.get('password') || '' };
+  setAuthError(''); setAuthBusy(true);
+  try { await doEmailAuth(mode, f); closeSheet(); showHome(false); toast(mode === 'signup' ? 'Account created' : 'Signed in'); }
+  catch (e) { setAuthError(humanAuthError(e)); }
+  setAuthBusy(false);
+}
+function setAuthError(msg) { const el = $('#auth-error'); if (el) el.textContent = msg || ''; }
+function setAuthBusy(b) {
+  authBusy = b; const btn = $('#auth-submit');
+  if (btn) { btn.disabled = b; btn.textContent = b ? 'Please wait…' : (authMode === 'signup' ? 'Create account' : 'Sign in'); }
+}
+function humanAuthError(e) {
+  const c = (e && e.code) || '';
+  const map = {
+    'auth/email-already-in-use': 'That email already has an account — try signing in.',
+    'auth/invalid-email': 'That email address looks wrong.',
+    'auth/weak-password': 'Password needs at least 6 characters.',
+    'auth/wrong-password': 'Wrong password — try again.',
+    'auth/user-not-found': 'No account with that email.',
+    'auth/invalid-credential': 'Email or password is incorrect.',
+    'auth/popup-closed-by-user': 'Sign-in was cancelled.',
+    'auth/network-request-failed': 'Network problem — check your connection.',
+  };
+  return map[c] || (e && e.message) || 'Something went wrong — try again.';
+}
+function initAuth() {
+  if (!CLOUD_ENABLED) return;            // local/guest only — nothing async to do
+  ensureCloud().then(c => {
+    c.authm.onAuthStateChanged(c.auth, u => {
+      if (u) {
+        if (!session || session.uid !== u.uid || session.provider !== 'cloud') {
+          activateSession({ uid: u.uid, email: u.email || '', username: u.displayName || (u.email || 'You').split('@')[0], provider: 'cloud' }).then(() => rerender());
+        } else cloudSubscribe();
+      } else if (session && session.provider === 'cloud') {
+        session = null; saveSession(null); state = load(); refreshAccountUI(); rerender();
+      }
+    });
+  }).catch(() => { /* SDK blocked/offline — stay in local/guest mode */ });
 }
 
 /* ====================== 4. Router / Views ====================== */
@@ -622,9 +910,10 @@ function toast(msg, actionLabel, fn) {
 
 /* ====================== Event wiring ====================== */
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-open],[data-menu],[data-new],[data-act],[data-color],[data-check],[data-qty],[data-sort],[data-filter],[data-clear-filters],[data-toast-action]');
+  const t = e.target.closest('[data-open],[data-menu],[data-new],[data-act],[data-color],[data-check],[data-qty],[data-sort],[data-filter],[data-clear-filters],[data-toast-action],[data-auth]');
   if (!t) return;
 
+  if (t.dataset.auth) return handleAuth(t.dataset.auth);
   if (t.dataset.menu) { e.stopPropagation(); return openListMenu(t.dataset.menu); }
   if (t.hasAttribute('data-open')) return showDetail(t.dataset.open);
   if (t.hasAttribute('data-new')) { const l = createList(); showDetail(l.id); setTimeout(() => $('#add-input').focus(), 320); return; }
@@ -661,6 +950,8 @@ document.addEventListener('click', e => {
 
 $('#fab').addEventListener('click', () => { const l = createList(); showDetail(l.id); setTimeout(() => $('#add-input').focus(), 320); });
 $('#sort-btn').addEventListener('click', openFindSheet);
+$('#avatar').addEventListener('click', () => { authMode = 'signin'; openAccountSheet(); });
+document.addEventListener('submit', e => { if (e.target.id === 'auth-form') { e.preventDefault(); handleAuthSubmit(e.target); } });
 $('#detail-back').addEventListener('click', navBack);
 $('#detail-copy').addEventListener('click', () => copyList(view.id));
 $('#detail-whatsapp').addEventListener('click', () => shareWhatsApp(view.id));
@@ -689,10 +980,12 @@ document.addEventListener('keydown', e => {
 
 /* ====================== 7. Init ====================== */
 function init() {
-  state = load();
+  session = loadSession();      // restore account (if any) BEFORE loading its data
+  state = load();               // synchronous, never blocks on the network
   try { history.replaceState({ v: 'home' }, ''); } catch (e) { histOK = false; }
   $('#page-detail').hidden = true; $('#page-home').hidden = false; $('#backdrop').hidden = true;
 
+  $('#avatar').innerHTML = I.person;
   $('#detail-back').innerHTML = I.back;
   $('#detail-copy').innerHTML = I.copy;
   $('#detail-whatsapp').innerHTML = I.whatsapp;
@@ -705,8 +998,10 @@ function init() {
   $('#fab-icon').innerHTML = I.plus;
   if (!SR) $('#mic').style.display = 'none';
 
+  refreshAccountUI();
   showHome(false);
   syncSend();
+  initAuth();                  // async; failures stay contained, app already usable
 
   try { if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js'); } catch (e) { }
 }

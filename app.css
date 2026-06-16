@@ -494,6 +494,60 @@ svg { display: block; }
   background: center / 50% no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 5 5L19 6'/%3E%3C/svg%3E");
 }
 
+/* ============================================================ account */
+.head-actions { display: flex; align-items: center; gap: 9px; }
+.avatar-btn {
+  width: 44px; height: 44px; flex: 0 0 44px;
+  border-radius: 50%;
+  background: var(--surface); box-shadow: var(--shadow-1);
+  color: var(--ink); display: grid; place-items: center;
+  font-weight: 800; font-size: 15px; letter-spacing: -.02em;
+  transition: transform .12s var(--ease-out), background .15s;
+}
+.avatar-btn:active { transform: scale(.9); }
+.avatar-btn svg { width: 22px; height: 22px; }
+.avatar-btn.signed { background: var(--ink); color: var(--canvas); }
+
+/* auth sheet */
+.btn-google {
+  width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 13px; border-radius: var(--r-pill);
+  background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--line-2);
+  font-weight: 600; font-size: 15px; color: var(--ink);
+  transition: transform .12s var(--ease-out), background .15s;
+}
+.btn-google:active { transform: scale(.97); background: var(--surface-2); }
+
+.auth-or { display: flex; align-items: center; gap: 12px; margin: 15px 0; color: var(--ink-3); font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.auth-or::before, .auth-or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+.auth-form { display: flex; flex-direction: column; gap: 10px; }
+.field {
+  width: 100%; background: var(--surface-2); border: 0; border-radius: 13px;
+  padding: 14px 15px; font-size: 15.5px; font-weight: 500;
+}
+.field:focus { outline: 2px solid var(--c); }
+.auth-error { color: #E5484D; font-size: 13px; font-weight: 600; margin: -2px 2px 0; min-height: 17px; }
+.auth-error:empty { min-height: 0; margin: 0; }
+
+.auth-links { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 13px 2px; }
+.link { color: var(--c); font-weight: 600; font-size: 13.5px; background: none; }
+.link:active { opacity: .6; }
+
+.auth-foot { display: flex; align-items: flex-start; gap: 8px; margin-top: 14px; color: var(--ink-3); font-size: 12px; font-weight: 500; line-height: 1.45; }
+.auth-foot svg { width: 15px; height: 15px; flex: 0 0 auto; margin-top: 1px; }
+
+/* profile */
+.acct-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.acct-avatar { width: 52px; height: 52px; flex: 0 0 52px; border-radius: 50%; background: var(--ink); color: var(--canvas); display: grid; place-items: center; font-weight: 800; font-size: 19px; }
+.acct-name { font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: -.02em; }
+.acct-mail { font-size: 13px; color: var(--ink-3); margin-top: 1px; }
+.sync-badge { display: flex; align-items: center; gap: 9px; background: var(--surface-2); border-radius: 14px; padding: 12px 14px; font-size: 13.5px; font-weight: 600; color: var(--ink-2); }
+.sync-badge svg { width: 18px; height: 18px; flex: 0 0 auto; color: var(--ink-3); }
+.sync-badge.on { background: color-mix(in srgb, #21A971 13%, var(--surface)); color: #1b8b5e; }
+.sync-badge.on svg { color: #21A971; }
+
 /* ============================================================ toast */
 .toast {
   position: fixed; left: 50%;

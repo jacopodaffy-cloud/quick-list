@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.google.com https://www.gstatic.com; frame-src https://*.firebaseapp.com https://accounts.google.com https://*.google.com; worker-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#F5F6F8" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0D0E12" media="(prefers-color-scheme: dark)">
@@ -15,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="app.css?v=2">
+  <link rel="stylesheet" href="app.css?v=3">
 </head>
 <body>
 <noscript><div style="padding:40px;font-family:system-ui">QuickList needs JavaScript to run.</div></noscript>
@@ -28,7 +29,10 @@
         <h1 class="wordmark">Quick<span class="wm-2">list</span><span class="blob"></span></h1>
         <p class="home-sub" id="home-sub"></p>
       </div>
-      <button class="icon-btn" id="sort-btn" aria-label="Sort and filter"></button>
+      <div class="head-actions">
+        <button class="avatar-btn" id="avatar" aria-label="Your account"></button>
+        <button class="icon-btn" id="sort-btn" aria-label="Sort and filter"></button>
+      </div>
     </header>
 
     <div class="search-wrap" id="search-wrap">
@@ -78,6 +82,7 @@
   <div id="sheet-root"></div>
   <div id="toast-root"></div>
 </div>
-<script src="app.js?v=2"></script>
+<script src="config.js?v=3"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>
