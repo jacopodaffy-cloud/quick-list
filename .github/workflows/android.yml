@@ -43,18 +43,19 @@ jobs:
       - name: Sync web assets into the Android project
         run: npx cap sync android
 
-      - name: Set targetSdk to 35 and version code 2
+      - name: Set targetSdk to 35 and version code
         run: |
-          cat android/app/build.gradle
-          sed -i 's/targetSdkVersion 34/targetSdkVersion 35/g' android/app/build.gradle
-          sed -i 's/targetSdk = 34/targetSdk = 35/g' android/app/build.gradle
-          sed -i 's/targetSdk 34/targetSdk 35/g' android/app/build.gradle
-          sed -i 's/compileSdkVersion 34/compileSdkVersion 35/g' android/app/build.gradle
-          sed -i 's/compileSdk = 34/compileSdk = 35/g' android/app/build.gradle
-          sed -i 's/compileSdk 34/compileSdk 35/g' android/app/build.gradle
+          # Capacitor 6 stores SDK versions in variables.gradle
+          sed -i 's/minSdkVersion = .*/minSdkVersion = 22/' android/variables.gradle
+          sed -i 's/compileSdkVersion = .*/compileSdkVersion = 35/' android/variables.gradle
+          sed -i 's/targetSdkVersion = .*/targetSdkVersion = 35/' android/variables.gradle
+          sed -i 's/versionCode = .*/versionCode = 3/' android/variables.gradle
+          # Also patch build.gradle just in case
+          sed -i 's/targetSdk[Version]* [=]*[ ]*34/targetSdkVersion 35/g' android/app/build.gradle
+          sed -i 's/compileSdk[Version]* [=]*[ ]*34/compileSdkVersion 35/g' android/app/build.gradle
           sed -i 's/versionCode 1/versionCode 3/g' android/app/build.gradle
-          echo "--- After changes ---"
-          grep -E "targetSdk|compileSdk|versionCode" android/app/build.gradle
+          echo "=== variables.gradle ==="
+          cat android/variables.gradle
 
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | python3 -c "import sys,base64; open('android/app/quicklist-release.keystore','wb').write(base64.b64decode(sys.stdin.read().strip()))"
