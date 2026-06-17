@@ -44,7 +44,7 @@ jobs:
         run: npx cap sync android
 
       - name: Decode keystore
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/quicklist-release.keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | python3 -c "import sys,base64; open('android/app/quicklist-release.keystore','wb').write(base64.b64decode(sys.stdin.read().strip()))"
 
       - name: Build release AAB (Play Store)
         run: |
