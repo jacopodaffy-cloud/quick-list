@@ -43,12 +43,13 @@ jobs:
       - name: Sync web assets into the Android project
         run: npx cap sync android
 
-      - name: Set targetSdk to 35
+      - name: Set targetSdk to 35 and version code 2
         run: |
           sed -i 's/targetSdkVersion 34/targetSdkVersion 35/g' android/app/build.gradle
           sed -i 's/targetSdk = 34/targetSdk = 35/g' android/app/build.gradle
           sed -i 's/compileSdkVersion 34/compileSdkVersion 35/g' android/app/build.gradle
           sed -i 's/compileSdk = 34/compileSdk = 35/g' android/app/build.gradle
+          sed -i 's/versionCode 1/versionCode 2/g' android/app/build.gradle
 
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | python3 -c "import sys,base64; open('android/app/quicklist-release.keystore','wb').write(base64.b64decode(sys.stdin.read().strip()))"
