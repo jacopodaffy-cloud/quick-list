@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delete Account — QuickList</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F5F6F8; color: #14161B; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .card { background: white; border-radius: 24px; padding: 40px; max-width: 520px; width: 100%; box-shadow: 0 4px 24px rgba(0,0,0,.08); }
+    h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 8px; }
+    .sub { color: #5A6072; font-size: 0.95rem; margin-bottom: 32px; }
+    h2 { font-size: 1rem; font-weight: 600; margin: 24px 0 8px; }
+    p { color: #5A6072; font-size: 0.9rem; line-height: 1.6; }
+    .steps { background: #F5F6F8; border-radius: 16px; padding: 20px; margin: 24px 0; }
+    .step { display: flex; gap: 12px; margin-bottom: 14px; align-items: flex-start; }
+    .step:last-child { margin-bottom: 0; }
+    .num { background: #5A63E0; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; flex-shrink: 0; }
+    .step p { color: #14161B; }
+    .btn { display: block; background: #F2555A; color: white; text-align: center; padding: 14px 24px; border-radius: 999px; font-weight: 600; font-size: 1rem; text-decoration: none; margin-top: 28px; }
+    .note { font-size: 0.8rem; color: #9197A6; margin-top: 16px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Delete your QuickList account</h1>
+    <p class="sub">You can request deletion of your account and all associated data by following the steps below.</p>
+
+    <h2>How to delete your account</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <p>Open the QuickList app or visit <strong>qwicklist-v3.web.app</strong></p>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <p>Tap the account icon in the top right corner</p>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <p>Tap <strong>Sign out</strong> and then send a deletion request via email</p>
+      </div>
+      <div class="step">
+        <div class="num">4</div>
+        <p>Your account and all lists will be permanently deleted within <strong>30 days</strong></p>
+      </div>
+    </div>
+
+    <h2>What gets deleted</h2>
+    <p>All your lists, items, and account information (email address, display name) stored in our database will be permanently deleted. No data is retained after the 30-day period.</p>
+
+    <a class="btn" href="mailto:jacopodaffy@gmail.com?subject=QuickList Account Deletion Request">Request account deletion via email</a>
+    <p class="note">We will process your request within 30 days and confirm via email.</p>
+  </div>
+</body>
+</html>
