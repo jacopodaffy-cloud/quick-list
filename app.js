@@ -26,6 +26,10 @@ const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const norm = s => String(s).trim().toLowerCase();
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/* ---- input sanitisation: trim, strip control chars, cap length ---- */
+const MAX = { title: 80, item: 200, items: 500, lists: 500, user: 40, email: 120, pw: 200 };
+const cleanText = (s, max) => String(s == null ? '' : s).replace(new RegExp('[\\u0000-\\u001F\\u007F]','g'), '').replace(/\s+/g, ' ').trim().slice(0, max || 200);
+
 function showFatal(err) {
   if (showFatal._done) return; showFatal._done = true;
   const msg = (err && (err.message || String(err))) || 'Unknown error';
@@ -107,12 +111,40 @@ const dataKeyFor = uid => 'quicklist.data.' + uid;
 const activeKey = () => session ? dataKeyFor(session.uid) : KEY;
 
 function blank() { return { v: 1, lists: [], nextColor: 0, sort: 'recent', filterColor: null, updatedAt: Date.now() }; }
+const validColor = c => (PALETTE.some(p => p.hex === c) ? c : PALETTE[0].hex);
+const cleanId = id => (typeof id === 'string' && /^[\w-]{1,40}$/.test(id)) ? id : uid();
+/* Deep sanitiser — every state that enters the app (storage, cloud pull,
+   shared link, merge) passes through here: malformed dropped, oversized clamped. */
 function normalize(s) {
-  if (!s || !Array.isArray(s.lists)) return null;
-  s.v = 1; s.sort = s.sort || 'recent'; if (!('filterColor' in s)) s.filterColor = null;
-  if (typeof s.nextColor !== 'number') s.nextColor = 0;
-  if (typeof s.updatedAt !== 'number') s.updatedAt = Date.now();
-  return s;
+  if (!s || typeof s !== 'object' || !Array.isArray(s.lists)) return null;
+  const out = {
+    v: 1,
+    sort: ['recent', 'name', 'progress', 'color'].includes(s.sort) ? s.sort : 'recent',
+    filterColor: PALETTE.some(p => p.hex === s.filterColor) ? s.filterColor : null,
+    nextColor: Number.isFinite(s.nextColor) ? Math.max(0, Math.floor(s.nextColor)) : 0,
+    updatedAt: Number.isFinite(s.updatedAt) ? s.updatedAt : Date.now(),
+    lists: s.lists.slice(0, MAX.lists)
+      .filter(l => l && typeof l === 'object' && Array.isArray(l.items))
+      .map(l => ({
+        id: cleanId(l.id),
+        title: cleanText(l.title, MAX.title),
+        color: validColor(l.color),
+        pinned: !!l.pinned,
+        tidy: !!l.tidy,
+        createdAt: Number.isFinite(l.createdAt) ? l.createdAt : Date.now(),
+        updatedAt: Number.isFinite(l.updatedAt) ? l.updatedAt : Date.now(),
+        items: l.items.slice(0, MAX.items)
+          .filter(i => i && typeof i === 'object')
+          .map(i => ({
+            id: cleanId(i.id),
+            text: cleanText(i.text, MAX.item),
+            done: !!i.done,
+            qty: (Number.isFinite(i.qty) && i.qty > 1) ? Math.min(999, Math.floor(i.qty)) : null,
+          }))
+          .filter(i => i.text.length > 0),
+      })),
+  };
+  return out;
 }
 const readData = key => { try { return normalize(JSON.parse(localStorage.getItem(key))); } catch (e) { return null; } };
 const writeData = (key, s) => { try { localStorage.setItem(key, JSON.stringify(s)); } catch (e) { } };
@@ -128,7 +160,7 @@ function save() {
   schedulePush();                          // cloud push (no-op unless signed into cloud)
 }
 
-const mkItem = (text, done = false, qty = null) => ({ id: uid(), text, done: !!done, qty: qty && qty > 1 ? qty : null });
+const mkItem = (text, done = false, qty = null) => ({ id: uid(), text: cleanText(text, MAX.item), done: !!done, qty: qty && qty > 1 ? Math.min(999, Math.floor(qty)) : null });
 function mkList(color) {
   return { id: uid(), title: '', color: color || nextColor(), items: [], pinned: false, tidy: false, createdAt: Date.now(), updatedAt: Date.now() };
 }
@@ -138,7 +170,10 @@ const touch = l => { l.updatedAt = Date.now(); };
 function tidySort(l) { if (!l.tidy) return; const u = l.items.filter(i => !i.done), d = l.items.filter(i => i.done); l.items = [...u, ...d]; }
 
 /* CRUD */
-function createList() { const l = mkList(); state.lists.unshift(l); save(); return l; }
+function createList() {
+  if (state.lists.length >= MAX.lists) { toast('You have reached the list limit'); return state.lists[0]; }
+  const l = mkList(); state.lists.unshift(l); save(); return l;
+}
 function deleteList(id) {
   const i = state.lists.findIndex(l => l.id === id); if (i < 0) return;
   const [removed] = state.lists.splice(i, 1); save();
@@ -210,9 +245,12 @@ const writeAccounts = a => { try { localStorage.setItem(ACCOUNTS_KEY, JSON.strin
 const matchUser = (a, id) => !!id && (norm(a.username) === norm(id) || (!!a.email && norm(a.email) === norm(id)));
 
 async function localSignUp({ username, email, password }) {
-  username = (username || '').trim(); email = (email || '').trim();
+  username = cleanText(username, MAX.user); email = cleanText(email, MAX.email);
+  password = String(password || '');
   if (username.length < 2) throw new Error('Pick a username (at least 2 characters)');
-  if ((password || '').length < 6) throw new Error('Password needs at least 6 characters');
+  if (password.length < 6) throw new Error('Password needs at least 6 characters');
+  if (password.length > MAX.pw) throw new Error('Password is too long');
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('That email address looks wrong');
   const accts = readAccounts();
   if (Object.values(accts).some(a => matchUser(a, username) || (email && matchUser(a, email)))) throw new Error('That username or email is already taken');
   const { salt, hash } = await pbkdf2(password);
@@ -262,17 +300,24 @@ async function cloudPush() {
   try { const c = await ensureCloud(); await c.fs.setDoc(c.fs.doc(c.db, 'users', session.uid), JSON.parse(JSON.stringify(state))); }
   catch (e) { /* offline — kept in local cache, retried on next change */ }
 }
+function editingNow() {
+  const a = document.activeElement;
+  return a && (a.id === 'detail-title' || a.classList.contains('item-edit') || a.id === 'add-input' || a.id === 'home-search');
+}
 function cloudSubscribe() {
   if (!session || session.provider !== 'cloud') return;
   ensureCloud().then(c => {
     if (cloudUnsub) cloudUnsub();
     cloudUnsub = c.fs.onSnapshot(c.fs.doc(c.db, 'users', session.uid), snap => {
-      if (!snap.exists()) return;
+      if (!snap.exists() || snap.metadata.hasPendingWrites) return;   // ignore our own optimistic writes
       const remote = normalize(snap.data());
-      if (remote && (remote.updatedAt || 0) > (state.updatedAt || 0)) {   // a newer write from another device
-        state = remote; writeData(activeKey(), state);
-        if (!sheetOpen()) rerender();
-      }
+      if (!remote) return;
+      // MERGE (never drop the list you're working on) instead of replacing wholesale
+      const merged = mergeStates(remote, state);
+      if (JSON.stringify(merged.lists) === JSON.stringify(state.lists)) return; // nothing actually changed
+      state = merged; writeData(activeKey(), state);
+      // re-render in place; a background sync must NEVER navigate you away or interrupt typing
+      if (!sheetOpen() && !editingNow()) rerender();
     }, () => { });
   }).catch(() => { });
 }
@@ -342,6 +387,48 @@ async function doEmailAuth(mode, f) {
   }
 }
 
+/* ---- login rate limiting: max 5 failed attempts per 50 minutes ----
+   Client-side throttle (Firebase Auth also rate-limits server-side). */
+const RL_KEY = 'quicklist.rl', RL_MAX = 5, RL_WINDOW = 50 * 60 * 1000;
+function rlFails() {
+  let f; try { f = JSON.parse(localStorage.getItem(RL_KEY)) || []; } catch (e) { f = []; }
+  const now = Date.now(); f = (Array.isArray(f) ? f : []).filter(t => now - t < RL_WINDOW);
+  try { localStorage.setItem(RL_KEY, JSON.stringify(f)); } catch (e) { }
+  return f;
+}
+function rlBlocked() {
+  const f = rlFails();
+  if (f.length < RL_MAX) return 0;
+  return Math.max(0, RL_WINDOW - (Date.now() - f[0]));   // ms until the oldest attempt expires
+}
+function rlRecordFail() { const f = rlFails(); f.push(Date.now()); try { localStorage.setItem(RL_KEY, JSON.stringify(f)); } catch (e) { } }
+function rlReset() { try { localStorage.removeItem(RL_KEY); } catch (e) { } }
+function rlMessage(ms) { const m = Math.ceil(ms / 60000); return `Too many sign-in attempts. Try again in ${m} minute${m === 1 ? '' : 's'}.`; }
+
+/* ---- account deletion (right to be forgotten) ---- */
+async function deleteAccount() {
+  const cur = session; if (!cur) return;
+  try {
+    if (cur.provider === 'cloud') {
+      const c = await ensureCloud();
+      try { await c.fs.deleteDoc(c.fs.doc(c.db, 'users', cur.uid)); } catch (e) { }   // remove data from the database
+      if (c.auth.currentUser) await c.authm.deleteUser(c.auth.currentUser);            // remove the auth identity
+    } else {
+      const accts = readAccounts(); delete accts[cur.uid]; writeAccounts(accts);
+    }
+    if (cloudUnsub) { cloudUnsub(); cloudUnsub = null; }
+    try { localStorage.removeItem(dataKeyFor(cur.uid)); } catch (e) { }                // wipe local copy
+    session = null; saveSession(null);
+    state = load(); refreshAccountUI(); closeSheet(); showHome(false);
+    toast('Account deleted');
+  } catch (e) {
+    if (e && e.code === 'auth/requires-recent-login') {
+      closeSheet(); endSession(); showHome(false);
+      toast('Please sign in again, then delete your account');
+    } else toast('Could not delete account — try again');
+  }
+}
+
 /* ---- account UI ---- */
 function refreshAccountUI() {
   const a = $('#avatar'); if (!a) return;
@@ -379,7 +466,9 @@ function openProfileSheet() {
     <div class="sync-badge ${isCloud ? 'on' : ''}">${isCloud ? I.cloudOn + '<span>Synced across your devices</span>' : I.device + '<span>Saved on this device</span>'}</div>
     <div class="menu-list">
       ${isCloud ? `<button class="menu-item" data-auth="sync">${I.refresh} Sync now</button>` : ''}
-      <button class="menu-item danger" data-auth="signout">${I.signout} Sign out</button>
+      <button class="menu-item" data-auth="signout">${I.signout} Sign out</button>
+      <div class="menu-sep"></div>
+      <button class="menu-item danger" data-auth="delete-account">${I.trash} Delete account</button>
     </div>
     ${!isCloud && CLOUD_ENABLED ? '' : (!isCloud ? `<p class="auth-foot">${I.shield}<span>Enable cloud config to sync this account to other devices — see SETUP-ACCOUNTS.md.</span></p>` : '')}
   `);
@@ -403,11 +492,23 @@ async function handleAuth(kind) {
   }
   if (kind === 'google') {
     if (!CLOUD_ENABLED) { setAuthError('Google sign-in needs cloud setup (one-time). You can still use a device account below.'); return; }
+    const blk = rlBlocked(); if (blk) { setAuthError(rlMessage(blk)); return; }
     setAuthBusy(true);
-    try { await doGoogle(); closeSheet(); showHome(false); toast('Signed in with Google'); }
-    catch (e) { setAuthError(humanAuthError(e)); }
+    try { await doGoogle(); rlReset(); closeSheet(); showHome(false); toast('Signed in with Google'); }
+    catch (e) { rlRecordFail(); setAuthError(humanAuthError(e)); }
     setAuthBusy(false);
   }
+  if (kind === 'delete-account') {
+    return openSheet(`
+      <h2 class="sheet-title">Delete account?</h2>
+      <p class="sheet-sub">This permanently removes your account and all its lists from the database. This can't be undone.</p>
+      <div class="sheet-actions">
+        <button class="btn btn-soft" data-auth="cancel-delete">Keep my account</button>
+        <button class="btn btn-danger" data-auth="confirm-delete">Delete forever</button>
+      </div>`);
+  }
+  if (kind === 'cancel-delete') { closeSheet(); return; }
+  if (kind === 'confirm-delete') { await deleteAccount(); return; }
 }
 async function handleAuthSubmit(form) {
   if (authBusy) return;
@@ -416,9 +517,14 @@ async function handleAuthSubmit(form) {
   const f = mode === 'signup'
     ? { username: (fd.get('username') || '').trim(), email: (fd.get('id') || '').trim(), password: fd.get('password') || '' }
     : { id: (fd.get('id') || '').trim(), password: fd.get('password') || '' };
+  if (mode === 'signin') { const blk = rlBlocked(); if (blk) { setAuthError(rlMessage(blk)); return; } }
   setAuthError(''); setAuthBusy(true);
-  try { await doEmailAuth(mode, f); closeSheet(); showHome(false); toast(mode === 'signup' ? 'Account created' : 'Signed in'); }
-  catch (e) { setAuthError(humanAuthError(e)); }
+  try {
+    await doEmailAuth(mode, f);
+    if (mode === 'signin') rlReset();
+    closeSheet(); showHome(false); toast(mode === 'signup' ? 'Account created' : 'Signed in');
+  }
+  catch (e) { if (mode === 'signin') rlRecordFail(); setAuthError(humanAuthError(e)); }
   setAuthBusy(false);
 }
 function setAuthError(msg) { const el = $('#auth-error'); if (el) el.textContent = msg || ''; }
@@ -482,7 +588,7 @@ function showDetail(id, push = true) {
   const d = $('#page-detail'); d.hidden = false;
   d.style.animation = 'none'; void d.offsetWidth; d.style.animation = '';
   $('#add-input').value = ''; syncSend();
-  renderDetail(); window.scrollTo(0, 0);
+  renderDetail(); requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
   if (push) pushNav({ v: 'detail', id });
 }
 const rerender = () => view.name === 'detail' ? renderDetail() : renderHome();
@@ -630,7 +736,7 @@ function addItems(raw) {
   if (!added) return;
   if (l.tidy) tidySort(l);
   touch(l); save(); buzz(8); renderDetail();
-  requestAnimationFrame(() => { const el = $('#items').lastElementChild; el && el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
+  requestAnimationFrame(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }));
 }
 function bumpQty(id) {
   const l = getList(view.id); if (!l) return;
@@ -805,12 +911,12 @@ function beginEdit(itemId) {
   const span = document.querySelector(`.item-text[data-edit="${itemId}"]`); if (!span) return;
   const raw = it.text + (it.qty > 1 ? ` x${it.qty}` : '');
   const input = document.createElement('input');
-  input.className = 'item-edit'; input.value = raw; input.setAttribute('aria-label', 'Edit item');
+  input.className = 'item-edit'; input.value = raw; input.maxLength = MAX.item + 8; input.setAttribute('aria-label', 'Edit item');
   span.replaceWith(input); input.focus(); input.setSelectionRange(raw.length, raw.length);
   const commit = () => {
     const v = input.value.trim();
     if (!v) { const i = l.items.indexOf(it); if (i >= 0) l.items.splice(i, 1); }
-    else { const { text, qty } = parseQty(stripMarker(v)); it.text = text || v; it.qty = qty; }
+    else { const { text, qty } = parseQty(stripMarker(v)); it.text = cleanText(text || v, MAX.item); it.qty = qty; }
     touch(l); save(); renderDetail();
   };
   input.addEventListener('blur', commit, { once: true });
@@ -967,13 +1073,13 @@ $('#fab').addEventListener('click', () => { const l = createList(); showDetail(l
 $('#sort-btn').addEventListener('click', openFindSheet);
 $('#avatar').addEventListener('click', () => { authMode = 'signin'; openAccountSheet(); });
 document.addEventListener('submit', e => { if (e.target.id === 'auth-form') { e.preventDefault(); handleAuthSubmit(e.target); } });
-$('#detail-back').addEventListener('click', navBack);
+$('#detail-back').addEventListener('click', () => { try { document.activeElement && document.activeElement.blur(); } catch (e) { } navBack(); });
 $('#detail-copy').addEventListener('click', () => copyList(view.id));
 $('#detail-whatsapp').addEventListener('click', () => shareWhatsApp(view.id));
 $('#detail-menu').addEventListener('click', () => openDetailMenu(view.id));
 $('#detail-meta').addEventListener('click', () => openColorSheet(view.id));
 
-$('#detail-title').addEventListener('input', () => { const l = getList(view.id); if (l) { l.title = $('#detail-title').value; touch(l); save(); } });
+$('#detail-title').addEventListener('input', () => { const l = getList(view.id); if (l) { l.title = cleanText($('#detail-title').value, MAX.title); touch(l); save(); } });
 
 $('#home-search').addEventListener('input', e => { homeQuery = e.target.value; renderHome(); });
 $('#search-clear').addEventListener('click', () => { homeQuery = ''; $('#home-search').value = ''; renderHome(); $('#home-search').focus(); });
