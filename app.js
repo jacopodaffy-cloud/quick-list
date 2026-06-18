@@ -484,12 +484,19 @@ async function handleAuth(kind) {
   }
   if (kind === 'forgot') {
     if (!CLOUD_ENABLED) { setAuthError('Password reset needs cloud sync. For a device account, create a new one.'); return; }
-    const email = prompt('Enter your account email to reset the password:');
-    if (!email) return;
-    try { const c = await ensureCloud(); await c.authm.sendPasswordResetEmail(c.auth, email.trim()); toast('Reset email sent'); }
-    catch (e) { setAuthError(humanAuthError(e)); }
+    openSheet(`
+      <h2 class="sheet-title">Reset password</h2>
+      <p class="sheet-sub">Enter your email and we'll send you a reset link.</p>
+      <form id="reset-form" class="auth-form">
+        <input class="field" name="email" type="email" placeholder="Your email" autocomplete="email" inputmode="email" required>
+        <p class="auth-error" id="reset-error" role="alert"></p>
+        <button class="btn btn-c btn-block" type="submit" id="reset-submit">Send reset link</button>
+      </form>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" data-auth="back-to-signin">Back to sign in</button>
+    `);
     return;
   }
+  if (kind === 'back-to-signin') { authMode = 'signin'; openAccountSheet(); return; }
   if (kind === 'google') {
     if (!CLOUD_ENABLED) { setAuthError('Google sign-in needs cloud setup (one-time). You can still use a device account below.'); return; }
     const blk = rlBlocked(); if (blk) { setAuthError(rlMessage(blk)); return; }
@@ -526,6 +533,21 @@ async function handleAuthSubmit(form) {
   }
   catch (e) { if (mode === 'signin') rlRecordFail(); setAuthError(humanAuthError(e)); }
   setAuthBusy(false);
+}
+async function handleResetSubmit(form) {
+  const email = (new FormData(form).get('email') || '').trim();
+  if (!email) return;
+  const btn = document.getElementById('reset-submit');
+  const err = document.getElementById('reset-error');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
+    const c = await ensureCloud();
+    await c.authm.sendPasswordResetEmail(c.auth, email);
+    closeSheet(); toast('Reset email sent — check your inbox');
+  } catch (e) {
+    if (err) err.textContent = humanAuthError(e);
+    if (btn) { btn.disabled = false; btn.textContent = 'Send reset link'; }
+  }
 }
 function setAuthError(msg) { const el = $('#auth-error'); if (el) el.textContent = msg || ''; }
 function setAuthBusy(b) {
@@ -1072,7 +1094,10 @@ document.addEventListener('click', e => {
 $('#fab').addEventListener('click', () => { const l = createList(); showDetail(l.id); setTimeout(() => $('#add-input').focus(), 320); });
 $('#sort-btn').addEventListener('click', openFindSheet);
 $('#avatar').addEventListener('click', () => { authMode = 'signin'; openAccountSheet(); });
-document.addEventListener('submit', e => { if (e.target.id === 'auth-form') { e.preventDefault(); handleAuthSubmit(e.target); } });
+document.addEventListener('submit', e => {
+  if (e.target.id === 'auth-form') { e.preventDefault(); handleAuthSubmit(e.target); }
+  if (e.target.id === 'reset-form') { e.preventDefault(); handleResetSubmit(e.target); }
+});
 $('#detail-back').addEventListener('click', () => { try { document.activeElement && document.activeElement.blur(); } catch (e) { } navBack(); });
 $('#detail-copy').addEventListener('click', () => copyList(view.id));
 $('#detail-whatsapp').addEventListener('click', () => shareWhatsApp(view.id));
