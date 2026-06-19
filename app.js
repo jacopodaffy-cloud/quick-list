@@ -612,18 +612,18 @@ function showDetail(id, push = true) {
   $('#add-input').value = ''; syncSend();
   renderDetail();
   requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
-  // Show thumb hint if list is tall enough to scroll
+  // Show scrollbar immediately if list is scrollable — always visible at 0.45
   setTimeout(() => {
     if (view.name !== 'detail') return;
     const sh = document.body.scrollHeight, wh = window.innerHeight;
     const track = $('#scroll-track');
     if (!track || sh <= wh + 60) return;
     const trackH = track.getBoundingClientRect().height;
-    const thumbH = Math.max(32, trackH * (wh / sh));
+    const thumbH = Math.max(36, trackH * (wh / sh));
     const thumb = track.querySelector('.scroll-thumb');
     if (thumb) { thumb.style.height = thumbH + 'px'; thumb.style.top = '0px'; }
-    track.style.opacity = '0.3';
-  }, 350);
+    track.style.opacity = '0.45';
+  }, 180);
   if (push) pushNav({ v: 'detail', id });
 }
 const rerender = () => view.name === 'detail' ? renderDetail() : renderHome();
@@ -1085,14 +1085,14 @@ function updateScrollTrack() {
   if (thumb) { thumb.style.height = thumbH + 'px'; thumb.style.top = thumbTop + 'px'; }
   track.style.opacity = '1';
   clearTimeout(scrollTrackTimer);
-  scrollTrackTimer = setTimeout(() => { if (track && !thumbDrag) track.style.opacity = '0.3'; }, 1200);
+  scrollTrackTimer = setTimeout(() => { if (track && !thumbDrag) track.style.opacity = '0.45'; }, 1000);
 }
 function hideScrollTrack() { const t = $('#scroll-track'); if (t) t.style.opacity = '0'; }
 
 /* ====================== 6g-2. Draggable scroll thumb ====================== */
 let thumbDrag = null;
 function initScrollThumb() {
-  // Pointerdown on the thumb — start drag
+  // Pointerdown on the thumb — start drag (passive: never blocks scroll)
   document.addEventListener('pointerdown', e => {
     const th = e.target.closest('.scroll-thumb');
     if (!th) return;
@@ -1101,13 +1101,13 @@ function initScrollThumb() {
     const sh = document.body.scrollHeight, wh = window.innerHeight;
     if (sh <= wh) return;
     const trackH = track.getBoundingClientRect().height;
-    const thumbH = Math.max(32, trackH * (wh / sh));
+    const thumbH = Math.max(36, trackH * (wh / sh));
     thumbDrag = { startY: e.clientY, startScroll: window.scrollY, trackH, thumbH, sh, wh };
     try { th.setPointerCapture(e.pointerId); } catch (_) {}
     th.classList.add('dragging');
     track.style.opacity = '1';
     clearTimeout(scrollTrackTimer);
-  });
+  }, { passive: true });
 
   // Pointermove — translate drag distance to scroll position
   document.addEventListener('pointermove', e => {
@@ -1126,7 +1126,7 @@ function initScrollThumb() {
     if (th) th.classList.remove('dragging');
     thumbDrag = null;
     clearTimeout(scrollTrackTimer);
-    scrollTrackTimer = setTimeout(() => { const t = $('#scroll-track'); if (t && view.name === 'detail') t.style.opacity = '0.3'; }, 1400);
+    scrollTrackTimer = setTimeout(() => { const t = $('#scroll-track'); if (t && view.name === 'detail') t.style.opacity = '0.45'; }, 1000);
   });
 }
 

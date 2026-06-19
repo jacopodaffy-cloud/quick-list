@@ -393,29 +393,29 @@ svg { display: block; }
 #scroll-track {
   position: fixed;
   right: 0;
-  top: 72px;
-  bottom: 108px;
-  width: 22px;        /* wide invisible touch hit area */
+  top: 64px;
+  bottom: 112px;
+  width: 32px;        /* large invisible touch hit area — easy to grab */
   z-index: 30;
   opacity: 0;
-  transition: opacity 0.22s ease;
+  transition: opacity 0.2s ease;
 }
 .scroll-thumb {
   position: absolute;
   right: 3px;
-  width: 4px;         /* visually thin */
-  min-height: 32px;
+  width: 5px;         /* slightly bigger than before */
+  min-height: 36px;
   border-radius: 4px;
   background: var(--c);
-  opacity: 0.55;
-  touch-action: none; /* prevents page scroll while dragging the thumb */
+  opacity: 0.6;
+  touch-action: none;
   cursor: grab;
   transition: width 0.12s, right 0.12s, opacity 0.12s;
 }
 .scroll-thumb.dragging {
-  width: 6px;
-  right: 1px;
-  opacity: 0.85;
+  width: 7px;
+  right: 2px;
+  opacity: 0.9;
   cursor: grabbing;
 }
 
