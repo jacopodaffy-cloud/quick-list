@@ -51,7 +51,7 @@ jobs:
       - name: Override variables.gradle and version code
         run: |
           cp variables.gradle android/variables.gradle
-          sed -i 's/versionCode 1/versionCode 9/g' android/app/build.gradle
+          sed -i 's/versionCode 1/versionCode 10/g' android/app/build.gradle
           echo "=== variables.gradle ==="
           cat android/variables.gradle
           echo "=== versionCode ==="
