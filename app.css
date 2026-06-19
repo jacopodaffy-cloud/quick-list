@@ -291,7 +291,7 @@ svg { display: block; }
 .progress i { display: block; height: 100%; width: 0; border-radius: 6px; background: var(--c); transition: width .45s var(--ease-out); }
 
 /* items */
-#items { display: flex; flex-direction: column; gap: 9px; padding-bottom: 8px; }
+#items { display: flex; flex-direction: column; gap: 9px; padding-bottom: 8px; touch-action: pan-y; }
 
 .item {
   display: flex; align-items: center; gap: 11px;

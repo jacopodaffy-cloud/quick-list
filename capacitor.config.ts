@@ -7,6 +7,9 @@ const config: CapacitorConfig = {
   server: {
     url: 'https://qwicklist-v3.web.app',
     cleartext: false
+  },
+  android: {
+    backgroundColor: '#14161B'
   }
 };
 

@@ -885,7 +885,7 @@ function onDragEnd() {
 let swipe = null;
 function startSwipe(e, wrap, itemId) {
   swipe = { wrap, row: wrap.querySelector('.item'), itemId, x0: e.clientX, y0: e.clientY, dx: 0, mode: '' };
-  window.addEventListener('pointermove', onSwipeMove, { passive: false });
+  window.addEventListener('pointermove', onSwipeMove, { passive: true });
   window.addEventListener('pointerup', onSwipeEnd);
   window.addEventListener('pointercancel', onSwipeEnd);
 }
@@ -898,7 +898,6 @@ function onSwipeMove(e) {
     else return;
   }
   if (swipe.mode !== 'swipe') return;
-  e.preventDefault();
   swipe.dx = Math.min(0, dx);
   swipe.row.style.transition = 'none';
   swipe.row.style.transform = `translateX(${swipe.dx}px)`;
