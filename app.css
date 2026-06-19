@@ -313,7 +313,7 @@ svg { display: block; }
   width: 40px; align-self: stretch; flex: 0 0 40px;
   display: grid; place-items: center;
   color: var(--ink-3);
-  cursor: grab; touch-action: pan-y;   /* allow vertical scroll here too; drag starts on long-press */
+  cursor: grab; touch-action: none;   /* none = drag starts immediately on touch, no scroll conflict */
   border-radius: 12px 0 0 12px;
 }
 .handle:active { color: var(--ink-2); }
@@ -403,7 +403,7 @@ svg { display: block; }
 .scroll-thumb {
   position: absolute;
   right: 3px;
-  width: 5px;         /* slightly bigger than before */
+  width: 6px;
   min-height: 36px;
   border-radius: 4px;
   background: var(--c);
@@ -413,11 +413,25 @@ svg { display: block; }
   transition: width 0.12s, right 0.12s, opacity 0.12s;
 }
 .scroll-thumb.dragging {
-  width: 7px;
+  width: 8px;
   right: 2px;
   opacity: 0.9;
   cursor: grabbing;
 }
+
+/* ============================================================ item delete button */
+.item-del {
+  flex: 0 0 30px;
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  color: #E5484D;
+  border-radius: 8px;
+  opacity: 0.65;
+  transition: opacity 0.12s, background 0.12s;
+  margin-right: -2px;
+}
+.item-del svg { width: 15px; height: 15px; stroke-width: 2.2; }
+.item-del:active { opacity: 1; background: rgba(229,72,77,.12); }
 
 /* ============================================================ add bar */
 .addbar-wrap {

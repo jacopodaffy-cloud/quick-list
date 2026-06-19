@@ -612,18 +612,8 @@ function showDetail(id, push = true) {
   $('#add-input').value = ''; syncSend();
   renderDetail();
   requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
-  // Show scrollbar immediately if list is scrollable — always visible at 0.45
-  setTimeout(() => {
-    if (view.name !== 'detail') return;
-    const sh = document.body.scrollHeight, wh = window.innerHeight;
-    const track = $('#scroll-track');
-    if (!track || sh <= wh + 60) return;
-    const trackH = track.getBoundingClientRect().height;
-    const thumbH = Math.max(36, trackH * (wh / sh));
-    const thumb = track.querySelector('.scroll-thumb');
-    if (thumb) { thumb.style.height = thumbH + 'px'; thumb.style.top = '0px'; }
-    track.style.opacity = '0.45';
-  }, 180);
+  // Always show scrollbar immediately on detail page
+  setTimeout(() => { if (view.name === 'detail') updateScrollTrack(); }, 180);
   if (push) pushNav({ v: 'detail', id });
 }
 const rerender = () => view.name === 'detail' ? renderDetail() : renderHome();
@@ -676,11 +666,11 @@ function ListCard(l) {
 
 function ItemRow(it) {
   return `<div class="item-wrap">
-    <div class="del-bg">${I.trash}</div>
     <div class="item ${it.done ? 'done' : ''}" data-id="${it.id}">
       <span class="handle" data-handle aria-label="Drag to reorder">${I.grip}</span>
       <button class="check" data-check="${it.id}" role="checkbox" aria-checked="${it.done}" aria-label="${esc(it.text)}">${I.tick}</button>
       <span class="item-text" data-edit="${it.id}"><span class="tx">${esc(it.text)}</span></span>
+      <button class="item-del" data-del="${it.id}" aria-label="Delete item">${I.trash}</button>
       ${it.qty > 1 ? `<button class="qty" data-qty="${it.id}" aria-label="Quantity ${it.qty}, tap to add one">×${it.qty}</button>` : ''}
     </div>
   </div>`;
@@ -816,24 +806,11 @@ function onPointerDown(e) {
   // Scroll is handled 100% natively — no pointer interception on item text.
   // Editing is triggered by the click listener below (click never fires during scroll).
 }
-/* Hold the handle briefly to pick a row up — a quick swipe instead just scrolls
-   the list (the handle is touch-action: pan-y). This is why the whole screen
-   scrolls now, not just the area outside the grip. */
+/* The handle has touch-action:none in CSS, so touching it never triggers browser
+   scroll — drag starts immediately on any pointer type. */
 function armDrag(e, row) {
   if (!row) return;
-  const pointerId = e.pointerId, x0 = e.clientX, y0 = e.clientY;
-  if (e.pointerType === 'mouse') { startDrag(row, y0, pointerId); return; }  // mouse: drag immediately (no scroll conflict)
-  const onMove = ev => { if (ev.pointerId === pointerId && Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) clear(); };
-  const clear = () => {
-    clearTimeout(pressTimer); pressTimer = null;
-    window.removeEventListener('pointermove', onMove);
-    window.removeEventListener('pointerup', clear);
-    window.removeEventListener('pointercancel', clear);
-  };
-  window.addEventListener('pointermove', onMove, { passive: true });
-  window.addEventListener('pointerup', clear);
-  window.addEventListener('pointercancel', clear);
-  pressTimer = setTimeout(() => { clear(); startDrag(row, y0, pointerId); }, 280);
+  startDrag(row, e.clientY, e.pointerId);
 }
 function startDrag(row, startY, pointerId) {
   if (!row) return;
@@ -1077,12 +1054,14 @@ function updateScrollTrack() {
   const track = $('#scroll-track');
   if (!track) return;
   const sh = document.body.scrollHeight, wh = window.innerHeight;
-  if (sh <= wh + 16) { track.style.opacity = '0'; return; }
-  const trackH = track.offsetHeight;
-  const thumbH = Math.max(28, trackH * (wh / sh));
-  const thumbTop = (window.scrollY / (sh - wh)) * (trackH - thumbH);
+  const scrollable = sh > wh + 16;
+  const trackH = track.offsetHeight || (wh - 180);
+  const thumbH = scrollable ? Math.max(36, trackH * (wh / sh)) : trackH * 0.9;
+  const thumbTop = scrollable ? (window.scrollY / (sh - wh)) * (trackH - thumbH) : 0;
   const thumb = track.querySelector('.scroll-thumb');
   if (thumb) { thumb.style.height = thumbH + 'px'; thumb.style.top = thumbTop + 'px'; }
+  // Always visible on detail page: full when scrolling, 0.35 at rest, 0.2 when not scrollable
+  if (!scrollable) { track.style.opacity = '0.2'; return; }
   track.style.opacity = '1';
   clearTimeout(scrollTrackTimer);
   scrollTrackTimer = setTimeout(() => { if (track && !thumbDrag) track.style.opacity = '0.45'; }, 1000);
@@ -1142,7 +1121,7 @@ function toast(msg, actionLabel, fn) {
 
 /* ====================== Event wiring ====================== */
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-open],[data-menu],[data-new],[data-act],[data-color],[data-check],[data-qty],[data-sort],[data-filter],[data-clear-filters],[data-toast-action],[data-auth]');
+  const t = e.target.closest('[data-open],[data-menu],[data-new],[data-act],[data-color],[data-check],[data-qty],[data-del],[data-sort],[data-filter],[data-clear-filters],[data-toast-action],[data-auth]');
   if (!t) return;
 
   if (t.dataset.auth) return handleAuth(t.dataset.auth);
@@ -1150,6 +1129,7 @@ document.addEventListener('click', e => {
   if (t.hasAttribute('data-open')) return showDetail(t.dataset.open);
   if (t.hasAttribute('data-new')) { const l = createList(); showDetail(l.id); setTimeout(() => $('#add-input').focus(), 320); return; }
   if (t.dataset.check) return toggleItem(t.dataset.check);
+  if (t.dataset.del) return deleteItem(t.dataset.del);
   if (t.dataset.qty) return bumpQty(t.dataset.qty);
   if (t.dataset.color) return setColor(t.dataset.id, t.dataset.color);
   if (t.hasAttribute('data-clear-filters')) { homeQuery = ''; $('#home-search').value = ''; state.filterColor = null; save(); renderHome(); return; }
@@ -1206,7 +1186,7 @@ $('#add-input').addEventListener('paste', e => {
 });
 $('#mic').addEventListener('click', toggleVoice);
 
-$('#items').addEventListener('pointerdown', onPointerDown, { passive: true });
+$('#items').addEventListener('pointerdown', onPointerDown);
 // Tap item text to edit — click never fires during scroll, so this never conflicts
 $('#items').addEventListener('click', e => {
   if (drag) return;

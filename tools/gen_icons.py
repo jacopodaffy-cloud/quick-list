@@ -19,7 +19,7 @@ def make_icon(px):
     img = Image.new('RGBA', (px, px), BG)
     d = ImageDraw.Draw(img)
     c = px / 2.0
-    off = 0.10 * px    # dots closer together (was 0.13)
+    off = 0.08 * px    # dots close together (was 0.13)
     r = 0.075 * px          # smaller than before (was 0.11)
     centres = [(c - off, c - off), (c + off, c - off),
                (c - off, c + off), (c + off, c + off)]
