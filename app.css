@@ -392,23 +392,31 @@ svg { display: block; }
 /* ============================================================ scroll track */
 #scroll-track {
   position: fixed;
-  right: 4px;
+  right: 0;
   top: 72px;
   bottom: 108px;
-  width: 3px;
-  border-radius: 3px;
-  pointer-events: none;
+  width: 22px;        /* wide invisible touch hit area */
   z-index: 30;
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.22s ease;
 }
 .scroll-thumb {
   position: absolute;
-  left: 0; width: 3px;
-  min-height: 28px;
-  border-radius: 3px;
+  right: 3px;
+  width: 4px;         /* visually thin */
+  min-height: 32px;
+  border-radius: 4px;
   background: var(--c);
   opacity: 0.55;
+  touch-action: none; /* prevents page scroll while dragging the thumb */
+  cursor: grab;
+  transition: width 0.12s, right 0.12s, opacity 0.12s;
+}
+.scroll-thumb.dragging {
+  width: 6px;
+  right: 1px;
+  opacity: 0.85;
+  cursor: grabbing;
 }
 
 /* ============================================================ add bar */
