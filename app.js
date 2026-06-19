@@ -600,7 +600,7 @@ function showHome(push = false) {
   $('#page-detail').hidden = true;
   const h = $('#page-home'); h.hidden = false;
   h.style.animation = 'none'; void h.offsetWidth; h.style.animation = '';
-  renderHome(); window.scrollTo(0, 0);
+  renderHome(); window.scrollTo(0, 0); hideScrollTrack();
   if (push) pushNav({ v: 'home' });
 }
 function showDetail(id, push = true) {
@@ -1058,7 +1058,26 @@ function setColor(id, hex) {
   l.color = hex; touch(l); save(); buzz(8); closeSheet(); rerender();
 }
 
-/* ====================== 6g. Toast ====================== */
+/* ====================== 6g. Scroll track ====================== */
+let scrollTrackTimer = null;
+function updateScrollTrack() {
+  if (view.name !== 'detail') return;
+  const track = $('#scroll-track');
+  if (!track) return;
+  const sh = document.body.scrollHeight, wh = window.innerHeight;
+  if (sh <= wh + 16) { track.style.opacity = '0'; return; }
+  const trackH = track.offsetHeight;
+  const thumbH = Math.max(28, trackH * (wh / sh));
+  const thumbTop = (window.scrollY / (sh - wh)) * (trackH - thumbH);
+  const thumb = track.querySelector('.scroll-thumb');
+  if (thumb) { thumb.style.height = thumbH + 'px'; thumb.style.top = thumbTop + 'px'; }
+  track.style.opacity = '1';
+  clearTimeout(scrollTrackTimer);
+  scrollTrackTimer = setTimeout(() => { if (track) track.style.opacity = '0'; }, 1200);
+}
+function hideScrollTrack() { const t = $('#scroll-track'); if (t) t.style.opacity = '0'; }
+
+/* ====================== 6h. Toast ====================== */
 let toastT = null, toastFn = null;
 function toast(msg, actionLabel, fn) {
   toastFn = fn || null;
@@ -1185,6 +1204,7 @@ function init() {
   syncSend();
   initAuth();                  // async; failures stay contained, app already usable
 
+  window.addEventListener('scroll', updateScrollTrack, { passive: true });
   try { if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js'); } catch (e) { }
 }
 try { init(); } catch (err) { showFatal(err); }
