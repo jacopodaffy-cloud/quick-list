@@ -800,9 +800,8 @@ let drag = null, pressTimer = null;
 function onPointerDown(e) {
   const handle = e.target.closest('[data-handle]');
   if (handle) { armDrag(e, handle.closest('.item')); return; }
-  if (e.target.closest('.qty') || e.target.closest('.check')) return;
-  const text = e.target.closest('.item-text');
-  if (text) startSwipe(e, text.closest('.item-wrap'), text.dataset.edit);
+  // Scroll is handled 100% natively — no pointer interception on item text.
+  // Editing is triggered by the click listener below (click never fires during scroll).
 }
 /* Hold the handle briefly to pick a row up — a quick swipe instead just scrolls
    the list (the handle is touch-action: pan-y). This is why the whole screen
@@ -1153,7 +1152,13 @@ $('#add-input').addEventListener('paste', e => {
 });
 $('#mic').addEventListener('click', toggleVoice);
 
-$('#items').addEventListener('pointerdown', onPointerDown);
+$('#items').addEventListener('pointerdown', onPointerDown, { passive: true });
+// Tap item text to edit — click never fires during scroll, so this never conflicts
+$('#items').addEventListener('click', e => {
+  if (drag) return;
+  const text = e.target.closest('.item-text');
+  if (text) beginEdit(text.dataset.edit);
+});
 
 /* Keep the add bar visible above the on-screen keyboard. The visualViewport
    shrinks when the keyboard opens; lift the bar by that amount so you can always
