@@ -795,29 +795,47 @@ function toggleVoice() {
   try { rec.start(); } catch (e) { }
 }
 
-/* ====================== 6c. Drag to reorder ====================== */
-let drag = null;
+/* ====================== 6c. Drag to reorder (long-press) ====================== */
+let drag = null, pressTimer = null;
 function onPointerDown(e) {
   const handle = e.target.closest('[data-handle]');
-  if (handle) { startDrag(e, handle.closest('.item')); return; }
+  if (handle) { armDrag(e, handle.closest('.item')); return; }
   if (e.target.closest('.qty') || e.target.closest('.check')) return;
   const text = e.target.closest('.item-text');
   if (text) startSwipe(e, text.closest('.item-wrap'), text.dataset.edit);
 }
-function startDrag(e, row) {
+/* Hold the handle briefly to pick a row up — a quick swipe instead just scrolls
+   the list (the handle is touch-action: pan-y). This is why the whole screen
+   scrolls now, not just the area outside the grip. */
+function armDrag(e, row) {
   if (!row) return;
-  e.preventDefault();
+  const pointerId = e.pointerId, x0 = e.clientX, y0 = e.clientY;
+  if (e.pointerType === 'mouse') { startDrag(row, y0, pointerId); return; }  // mouse: drag immediately (no scroll conflict)
+  const onMove = ev => { if (ev.pointerId === pointerId && Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) clear(); };
+  const clear = () => {
+    clearTimeout(pressTimer); pressTimer = null;
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', clear);
+    window.removeEventListener('pointercancel', clear);
+  };
+  window.addEventListener('pointermove', onMove, { passive: true });
+  window.addEventListener('pointerup', clear);
+  window.addEventListener('pointercancel', clear);
+  pressTimer = setTimeout(() => { clear(); startDrag(row, y0, pointerId); }, 280);
+}
+function startDrag(row, startY, pointerId) {
+  if (!row) return;
   const container = $('#items');
   const rows = [...container.querySelectorAll('.item')];
   const rects = rows.map(r => r.getBoundingClientRect());
   const h = rects[0].height;
   const gap = rects.length > 1 ? rects[1].top - rects[0].bottom : 9;
-  drag = { row, rows, rects, container, h, gap, startY: e.clientY, index: rows.indexOf(row), current: rows.indexOf(row) };
+  drag = { row, rows, rects, container, h, gap, startY, index: rows.indexOf(row), current: rows.indexOf(row) };
   row.classList.add('dragging');
   rows.forEach(r => { if (r !== row) r.classList.add('shift'); });
   container.style.touchAction = 'none';
-  try { row.setPointerCapture(e.pointerId); } catch (x) { }
-  buzz(12);
+  try { row.setPointerCapture(pointerId); } catch (x) { }
+  buzz(14);
   window.addEventListener('pointermove', onDragMove, { passive: false });
   window.addEventListener('pointerup', onDragEnd);
   window.addEventListener('pointercancel', onDragEnd);
@@ -1118,6 +1136,25 @@ $('#add-input').addEventListener('paste', e => {
 $('#mic').addEventListener('click', toggleVoice);
 
 $('#items').addEventListener('pointerdown', onPointerDown);
+
+/* Keep the add bar visible above the on-screen keyboard. The visualViewport
+   shrinks when the keyboard opens; lift the bar by that amount so you can always
+   see what you're typing. Works whether or not the WebView honours
+   interactive-widget=resizes-content. */
+function syncKeyboard() {
+  const vv = window.visualViewport; if (!vv) return;
+  const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+  document.documentElement.style.setProperty('--kb', kb + 'px');
+  document.body.classList.toggle('kb-open', kb > 80);
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', syncKeyboard);
+  window.visualViewport.addEventListener('scroll', syncKeyboard);
+}
+$('#add-input').addEventListener('focus', () => {
+  setTimeout(() => { syncKeyboard(); try { $('#add-input').scrollIntoView({ block: 'nearest' }); } catch (e) { } }, 250);
+});
+$('#add-input').addEventListener('blur', () => { setTimeout(syncKeyboard, 50); });
 
 $('#backdrop').addEventListener('click', closeSheet);
 document.addEventListener('keydown', e => {

@@ -64,6 +64,25 @@ node_modules/
 
 # dotenv environment variables file
 .env
+.env.*
+!.env.example
+
+# Real secrets — NEVER commit (service accounts, private keys, admin SDK, signing keys)
+# (gitignore has no inline comments — keep patterns on their own lines)
+*.pem
+*.key
+*.keystore
+*.jks
+keystore.properties
+*-private-key*.json
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+# optional gitignored override for the public config.js:
+config.local.js
 
 # dataconnect generated files
 .dataconnect
+
+# NOTE: config.js is intentionally tracked. It holds only Firebase's PUBLIC
+# web config (apiKey/projectId/appId) — safe to publish; it ships to every
+# browser regardless. Real protection = Firestore rules + App Check (SECURITY.md).

@@ -85,10 +85,8 @@ svg { display: block; }
 :focus-visible { outline: 2px solid var(--c); outline-offset: 2px; border-radius: 8px; }
 
 #app { max-width: 520px; margin: 0 auto; min-height: 100dvh; position: relative; background: var(--canvas); }
-@media (min-width: 600px) {
-  body { background: color-mix(in srgb, var(--canvas) 78%, #000 8%); }
-  #app { box-shadow: 0 0 0 1px var(--line), 0 30px 90px rgba(0,0,0,.2); }
-}
+/* No contrasting "phone frame" border on wide screens — the surrounding area
+   matches the canvas so there's no visible white line/seam. */
 
 .page {
   min-height: 100dvh;
@@ -125,6 +123,10 @@ svg { display: block; }
 .btn-soft { background: var(--surface-2); color: var(--ink); }
 .btn-ghost { background: transparent; color: var(--ink-2); }
 .btn-block { width: 100%; padding: 15px; font-size: 16px; }
+.btn-danger { background: #E5484D; color: #fff; }
+.btn-danger:active { filter: brightness(.95); }
+.sheet-actions { display: flex; gap: 10px; margin-top: 18px; }
+.sheet-actions .btn { flex: 1; }
 
 /* ============================================================ home header */
 .home-head { display: flex; align-items: center; justify-content: space-between; margin: 6px 0 14px; }
@@ -261,8 +263,14 @@ svg { display: block; }
 #fab svg { width: 22px; height: 22px; }
 
 /* ============================================================ detail */
-#page-detail { background: var(--tint); min-height: 100dvh; }
-.detail-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+#page-detail { background: var(--tint); min-height: 100dvh; padding-top: 0; }
+.detail-head {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 0 calc(var(--pad) * -1) 14px;
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) var(--pad) 10px;
+  background: var(--tint);   /* always reachable: back arrow stays pinned while you scroll/type */
+}
 .detail-tools { display: flex; gap: 9px; }
 .detail-head .icon-btn { background: var(--surface); }
 
@@ -305,7 +313,7 @@ svg { display: block; }
   width: 40px; align-self: stretch; flex: 0 0 40px;
   display: grid; place-items: center;
   color: var(--ink-3);
-  cursor: grab; touch-action: none;
+  cursor: grab; touch-action: pan-y;   /* allow vertical scroll here too; drag starts on long-press */
   border-radius: 12px 0 0 12px;
 }
 .handle:active { color: var(--ink-2); }
@@ -327,6 +335,7 @@ svg { display: block; }
   font-size: 15.5px; font-weight: 500;
   padding: 12px 4px 12px 0;
   cursor: text; overflow-wrap: anywhere;
+  touch-action: pan-y;   /* vertical scroll always works; horizontal swipe handled in JS */
 }
 .item-text .tx { position: relative; }
 .item-text .tx::after {
@@ -382,13 +391,16 @@ svg { display: block; }
 
 /* ============================================================ add bar */
 .addbar-wrap {
-  position: fixed; bottom: 0;
+  position: fixed;
+  bottom: var(--kb, 0px);   /* lifts above the on-screen keyboard (see visualViewport handler) */
   left: max(0px, calc(50vw - 260px));
   width: min(100vw, 520px);
   padding: 10px var(--pad) calc(14px + env(safe-area-inset-bottom, 0px));
   background: linear-gradient(to top, var(--tint) 74%, transparent);
   z-index: 25;
+  transition: bottom .18s var(--ease-out);
 }
+body.kb-open .addbar-wrap { padding-bottom: 10px; }   /* no home-indicator gap while keyboard is up */
 #addbar {
   display: flex; align-items: center; gap: 8px;
   background: var(--surface); border-radius: var(--r-pill);

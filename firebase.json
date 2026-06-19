@@ -1,11 +1,27 @@
 {
+  "firestore": {
+    "rules": "firestore.rules"
+  },
   "hosting": {
     "site": "qwicklist-v3",
     "public": ".",
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "*.keystore",
+      "*.jks",
+      ".env",
+      ".env.*",
+      "config.local.js",
+      "config.example.js",
+      "*.md",
+      "tools/**",
+      "*.gradle",
+      "capacitor.config.ts",
+      "twa-manifest.json",
+      "package.json",
+      "skills-lock.json"
     ],
     "rewrites": [
       {

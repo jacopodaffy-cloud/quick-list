@@ -74,6 +74,9 @@
 <script type="module">
   const ADMIN_EMAIL = 'jacopodaffy@gmail.com';
   const FB = 'https://www.gstatic.com/firebasejs/10.12.5/';
+  // escape untrusted user data before putting it in the DOM (prevents stored XSS
+  // via a malicious displayName/email aimed at the admin's browser)
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   const cfg = {
     apiKey: "AIzaSyCqpquRDztkMRJ3HHU-Uuxuh9-xU48pUmw",
@@ -145,11 +148,11 @@
         const name = u.displayName || u.email || u.uid;
 
         tbody.innerHTML += `<tr>
-          <td>${name}</td>
-          <td style="font-family:monospace;font-size:0.75rem;color:#888">${u.uid}</td>
-          <td><span class="badge">${lists.length}</span></td>
-          <td><span class="badge">${items}</span></td>
-          <td style="color:#888">${updated}</td>
+          <td>${esc(name)}</td>
+          <td style="font-family:monospace;font-size:0.75rem;color:#888">${esc(u.uid)}</td>
+          <td><span class="badge">${lists.length | 0}</span></td>
+          <td><span class="badge">${items | 0}</span></td>
+          <td style="color:#888">${esc(updated)}</td>
         </tr>`;
       });
 
