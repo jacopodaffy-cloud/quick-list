@@ -80,7 +80,10 @@ const I = {
   refresh: ic('<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/>'),
   signout: ic('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>'),
   shield: ic('<path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/>'),
-  gear: ic('<circle cx="12" cy="12" r="3.4"/><path d="M10.6 3.1a1.2 1.2 0 0 1 1.18-.98h.44a1.2 1.2 0 0 1 1.18.98l.23 1.27c.5.16.97.43 1.38.78l1.22-.45a1.2 1.2 0 0 1 1.46.53l.4.7c.3.5.2 1.14-.23 1.53l-.97.86c.07.52.07 1.05 0 1.57l.97.86c.44.39.54 1.03.24 1.53l-.4.7a1.2 1.2 0 0 1-1.47.53l-1.22-.45c-.41.35-.88.62-1.38.78l-.23 1.27a1.2 1.2 0 0 1-1.18.98h-.44a1.2 1.2 0 0 1-1.18-.98l-.23-1.27a5.6 5.6 0 0 1-1.38-.78l-1.22.45a1.2 1.2 0 0 1-1.46-.53l-.4-.7a1.2 1.2 0 0 1 .23-1.53l.97-.86a5.7 5.7 0 0 1 0-1.57l-.97-.86a1.2 1.2 0 0 1-.24-1.53l.4-.7a1.2 1.2 0 0 1 1.47-.53l1.22.45c.41-.35.88-.62 1.38-.78l.23-1.27Z"/>'),
+  /* Settings — a clean filled cog ("rotella") with a punched-out centre hole
+     (fill-rule evenodd), so the circle is unmistakably part of the gear. Solid
+     fill reads crisply at any size/density and in light & dark. */
+  gear: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65A.488.488 0 0 0 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/></svg>',
   trophy: ic('<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0Z"/><path d="M7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3"/>'),
   medal: ic('<circle cx="12" cy="15" r="6"/><path d="m9 9-3-6M15 9l3-6M9.5 3h5"/><path d="m12 12 .9 1.9 2.1.3-1.5 1.5.4 2.1-1.9-1-1.9 1 .4-2.1L9 14.2l2.1-.3Z" fill="currentColor" stroke="none"/>'),
   award: ic('<circle cx="12" cy="9" r="6"/><path d="m8.5 14-1.5 7 5-3 5 3-1.5-7"/>'),
@@ -872,7 +875,7 @@ window.addEventListener('popstate', e => {
 
 function showHome(push = false) {
   view.name = 'home'; view.id = null;
-  document.body.classList.remove('fmt-on');
+  document.body.classList.remove('fmt-on', 'view-detail');
   $('#page-detail').hidden = true;
   const h = $('#page-home'); h.hidden = false;
   h.style.animation = 'none'; void h.offsetWidth; h.style.animation = '';
@@ -887,8 +890,9 @@ function showDetail(id, push = true) {
   d.style.animation = 'none'; void d.offsetWidth; d.style.animation = '';
   $('#add-input').value = ''; syncSend();
   document.body.classList.remove('fmt-on');
+  document.body.classList.add('view-detail');
   renderDetail();
-  requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  requestAnimationFrame(() => { d.scrollTop = 0; updateScrollbar(); });
   if (push) pushNav({ v: 'detail', id });
 }
 const rerender = () => view.name === 'detail' ? renderDetail() : renderHome();
@@ -1035,6 +1039,7 @@ function renderDetail() {
     <h3>Nothing here yet</h3>
     <p>Type below, paste a whole list, or tap the mic and say it.</p>
   </div>`;
+  requestAnimationFrame(updateScrollbar);   // resize/position the thumb for the new content
 }
 let noAnim = false;
 
@@ -1062,7 +1067,7 @@ function addItems(raw) {
   if (!added) return;
   if (l.tidy) tidySort(l);
   touch(l); save(); buzz(8); renderDetail();
-  requestAnimationFrame(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }));
+  requestAnimationFrame(() => { const d = $('#page-detail'); if (d) d.scrollTo({ top: d.scrollHeight, behavior: 'smooth' }); updateScrollbar(); });
 }
 function bumpQty(id) {
   const l = getList(view.id); if (!l) return;
@@ -1343,18 +1348,64 @@ function setColor(id, hex) {
   l.color = hex; touch(l); save(); buzz(8); closeSheet(); rerender();
 }
 
-/* ====================== 6g. Scrolling + minimal scrollbar ======================
-   The whole detail page scrolls natively (body scroll, like WhatsApp).
-   A thin right-edge indicator appears while scrolling and can be dragged or
-   tapped to jump — it fades out 1.8 s after the last scroll event. */
-
-/* ====================== 6g. Scrolling ======================
-   The detail page scrolls 100% natively (the browser's own momentum scroll,
-   exactly like WhatsApp / Telegram / iOS / Android lists). There is NO custom
-   scrollbar overlay: the previous one was a fixed strip on the right edge with
-   pointer-events:auto + touch-action:none, which intercepted touches near the
-   edge and drove scroll with jerky instant jumps. Removing it makes dragging a
-   finger anywhere on the list scroll smoothly and reach every item. */
+/* ====================== 6g. Scroll + minimal custom scrollbar ======================
+   The detail page is a dedicated scroll container (#page-detail, see CSS) with
+   native momentum scrolling. On top of that we draw ONE minimal, always-visible,
+   grabbable thumb on the right edge — it reflects the scroll position and can be
+   dragged or tapped to move through long lists. It never blocks normal scrolling
+   (it's a narrow overlay; the rest of the page scrolls natively as usual). */
+const detailScroller = () => $('#page-detail');
+function updateScrollbar() {
+  if (view.name !== 'detail') return;
+  const sc = detailScroller(), bar = $('#scrollbar'), thumb = $('#scrollthumb');
+  if (!sc || !bar || !thumb) return;
+  const ch = sc.clientHeight, sh = sc.scrollHeight, st = sc.scrollTop;
+  const trackH = bar.clientHeight;
+  if (sh <= ch + 4 || trackH <= 0) { thumb.style.opacity = '0'; return; }   // nothing to scroll
+  thumb.style.opacity = '1';
+  const thumbH = clamp((ch / sh) * trackH, 44, trackH);
+  const maxScroll = sh - ch;
+  const top = maxScroll > 0 ? (st / maxScroll) * (trackH - thumbH) : 0;
+  thumb.style.height = thumbH + 'px';
+  thumb.style.transform = `translateY(${Math.round(top)}px)`;
+}
+let sbRaf = 0;
+function onDetailScroll() { if (sbRaf) return; sbRaf = requestAnimationFrame(() => { sbRaf = 0; updateScrollbar(); }); }
+function initScrollbar() {
+  const bar = $('#scrollbar'), sc0 = detailScroller();
+  if (!bar || !sc0) return;
+  sc0.addEventListener('scroll', onDetailScroll, { passive: true });
+  window.addEventListener('resize', () => updateScrollbar(), { passive: true });
+  bar.addEventListener('pointerdown', e => {
+    const sc = detailScroller(); if (!sc) return;
+    const thumb = $('#scrollthumb');
+    const barRect = bar.getBoundingClientRect();
+    const thumbRect = thumb.getBoundingClientRect();
+    const trackH = bar.clientHeight, thumbH = thumbRect.height;
+    const maxScroll = sc.scrollHeight - sc.clientHeight;
+    if (maxScroll <= 0) return;
+    bar.classList.add('dragging');
+    try { bar.setPointerCapture(e.pointerId); } catch (_) { }
+    // Grab the thumb where you press; if you press the track outside it, centre on the press.
+    let grabOffset = (e.clientY >= thumbRect.top && e.clientY <= thumbRect.bottom) ? (e.clientY - thumbRect.top) : thumbH / 2;
+    const apply = clientY => {
+      const range = trackH - thumbH;
+      const frac = range > 0 ? clamp((clientY - barRect.top - grabOffset) / range, 0, 1) : 0;
+      sc.scrollTop = frac * maxScroll;
+    };
+    apply(e.clientY);
+    const move = me => apply(me.clientY);
+    const end = () => {
+      bar.classList.remove('dragging');
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+    };
+    window.addEventListener('pointermove', move, { passive: true });
+    window.addEventListener('pointerup', end, { once: true });
+    window.addEventListener('pointercancel', end, { once: true });
+  });
+}
 
 /* ====================== 6h. Toast ====================== */
 let toastT = null, toastFn = null;
@@ -1532,6 +1583,7 @@ function init() {
   }
   refreshAccountUI();
   snapshotBadges();            // baseline so existing progress doesn't fire "unlocked" toasts on load
+  initScrollbar();
   showHome(false);
   syncSend();
   initAuth();                  // async; failures stay contained, app already usable

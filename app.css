@@ -298,7 +298,22 @@ svg { display: block; }
 #fab svg { width: 22px; height: 22px; }
 
 /* ============================================================ detail */
-#page-detail { background: var(--tint); min-height: 100dvh; padding-top: 0; }
+/* The detail page is its own dedicated scroll container (height + overflow),
+   NOT body scroll. This is the reliable cross-platform pattern: predictable
+   momentum scrolling on every Android WebView / iOS Safari, immune to the
+   body-scroll + 100dvh + fixed-element quirks. Native scrollbar hidden — we
+   draw a minimal custom one (#scrollbar) that's always visible & grabbable. */
+#page-detail {
+  background: var(--tint);
+  height: 100dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;   /* momentum scroll on older iOS */
+  overscroll-behavior: contain;
+  padding-top: 0;
+  scrollbar-width: none;               /* Firefox: hide native bar */
+}
+#page-detail::-webkit-scrollbar { width: 0; height: 0; display: none; }  /* WebKit/Blink */
 .detail-head {
   position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; justify-content: space-between;
@@ -404,17 +419,7 @@ svg { display: block; }
 }
 .item-edit:focus { outline: 2px solid var(--c); }
 
-.item-wrap {
-  position: relative;
-  border-radius: var(--r-row);
-  /* Browser-native windowing: rows scrolled off-screen skip layout & paint
-     entirely — the web's built-in equivalent of list virtualization. The
-     `auto 60px` hint reserves the right height so the scrollbar never jumps
-     and scroll position stays stable. Keeps lists with hundreds/thousands of
-     rows smooth with zero custom virtual-list code. */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 60px;
-}
+.item-wrap { position: relative; border-radius: var(--r-row); }
 
 .detail-empty { text-align: center; padding: 54px 24px; animation: fade-up .35s var(--ease-out); }
 .detail-empty .ring {
@@ -503,7 +508,34 @@ body.fmt-on .fmt-bar { display: flex; }
 
 .voice-hint { text-align: center; font-size: 12.5px; font-weight: 600; color: var(--deep); padding: 0 0 8px; height: 20px; }
 
-/* The detail list uses native momentum scrolling — no custom scrollbar overlay. */
+/* ============================================================ custom scrollbar
+   Minimal, always-visible, grabbable thumb on the right edge of the list.
+   Aligned to the centred app column (not the raw viewport edge) so it sits at
+   the column's right on tablet/desktop too. The thumb is the only visible
+   part; a wider invisible hit-zone makes it easy to grab with a finger. */
+#scrollbar {
+  position: fixed;
+  right: max(2px, calc(50vw - var(--shell) / 2 + 2px));
+  top: calc(env(safe-area-inset-top, 0px) + 74px);   /* below the sticky header */
+  bottom: calc(104px + env(safe-area-inset-bottom, 0px));   /* above the add bar */
+  width: 16px;            /* invisible touch zone — easy to grab */
+  z-index: 26;
+  display: none;
+  touch-action: none;
+}
+body.view-detail #scrollbar { display: block; }
+#scrollthumb {
+  position: absolute;
+  right: 3px; top: 0;
+  width: 7px;
+  min-height: 44px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--ink-3) 60%, transparent);
+  transition: width .12s var(--ease-out), background .15s, opacity .2s;
+  will-change: transform;
+}
+#scrollbar.dragging #scrollthumb { width: 10px; background: var(--ink-2); }
+@media (hover: hover) { #scrollbar:hover #scrollthumb { width: 10px; background: var(--ink-2); } }
 
 /* ============================================================ sheets */
 #backdrop { position: fixed; inset: 0; background: rgba(8, 10, 14, .5); opacity: 0; transition: opacity .22s; z-index: 50; }
