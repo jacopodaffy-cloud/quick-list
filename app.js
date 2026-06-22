@@ -80,7 +80,7 @@ const I = {
   refresh: ic('<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/>'),
   signout: ic('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>'),
   shield: ic('<path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/>'),
-  gear: ic('<circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l1.7-1.3-1.8-3.1-2 .8a7.6 7.6 0 0 0-2.6-1.5L14.4 2H9.6l-.3 2.4A7.6 7.6 0 0 0 6.7 6l-2-.8L2.9 8.2l1.7 1.3a7.8 7.8 0 0 0 0 3l-1.7 1.3 1.8 3.1 2-.8a7.6 7.6 0 0 0 2.6 1.5l.3 2.4h4.8l.3-2.4a7.6 7.6 0 0 0 2.6-1.5l2 .8 1.8-3.1Z"/>'),
+  gear: ic('<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>'),
   trophy: ic('<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0Z"/><path d="M7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3"/>'),
   medal: ic('<circle cx="12" cy="15" r="6"/><path d="m9 9-3-6M15 9l3-6M9.5 3h5"/><path d="m12 12 .9 1.9 2.1.3-1.5 1.5.4 2.1-1.9-1-1.9 1 .4-2.1L9 14.2l2.1-.3Z" fill="currentColor" stroke="none"/>'),
   award: ic('<circle cx="12" cy="9" r="6"/><path d="m8.5 14-1.5 7 5-3 5 3-1.5-7"/>'),
@@ -873,6 +873,7 @@ window.addEventListener('popstate', e => {
 function showHome(push = false) {
   view.name = 'home'; view.id = null;
   $('#page-detail').hidden = true;
+  const sb = $('#scroll-bar'); if (sb) sb.style.opacity = '0';
   const h = $('#page-home'); h.hidden = false;
   h.style.animation = 'none'; void h.offsetWidth; h.style.animation = '';
   renderHome(); window.scrollTo(0, 0);
@@ -886,7 +887,7 @@ function showDetail(id, push = true) {
   d.style.animation = 'none'; void d.offsetWidth; d.style.animation = '';
   $('#add-input').value = ''; syncSend();
   renderDetail();
-  requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  requestAnimationFrame(() => { window.scrollTo({ top: 0, behavior: 'instant' }); updateScrollBar(); });
   if (push) pushNav({ v: 'detail', id });
 }
 const rerender = () => view.name === 'detail' ? renderDetail() : renderHome();
@@ -1075,15 +1076,35 @@ function toggleVoice() {
 let drag = null, pressTimer = null;
 function onPointerDown(e) {
   const handle = e.target.closest('[data-handle]');
-  if (handle) { armDrag(e, handle.closest('.item')); return; }
-  // Scroll is handled 100% natively — no pointer interception on item text.
-  // Editing is triggered by the click listener below (click never fires during scroll).
-}
-/* The handle has touch-action:none in CSS, so touching it never triggers browser
-   scroll — drag starts immediately on any pointer type. */
-function armDrag(e, row) {
-  if (!row) return;
-  startDrag(row, e.clientY, e.pointerId);
+  if (handle) {
+    const row = handle.closest('.item');
+    if (!row) return;
+    /* Long-press (400 ms hold without moving) triggers drag.
+       Finger movement > 8 px before the timer fires cancels it and lets
+       native pan-y scroll take over — so normal scrolling works everywhere. */
+    let timer = null, moved = false;
+    const startY = e.clientY, startX = e.clientX, pId = e.pointerId;
+    function onMove(me) {
+      if (!moved && (Math.abs(me.clientY - startY) > 8 || Math.abs(me.clientX - startX) > 8)) {
+        moved = true; clearTimeout(timer); timer = null; cleanup();
+      }
+    }
+    function onUp() { clearTimeout(timer); timer = null; cleanup(); }
+    function cleanup() {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    }
+    timer = setTimeout(() => {
+      timer = null;
+      if (!moved) { cleanup(); startDrag(row, startY, pId); }
+    }, 400);
+    window.addEventListener('pointermove', onMove, { passive: true });
+    window.addEventListener('pointerup', onUp, { once: true });
+    window.addEventListener('pointercancel', onUp, { once: true });
+    return;
+  }
+  // All other touches: 100% native scroll. Click listener handles taps (never fires during scroll).
 }
 function startDrag(row, startY, pointerId) {
   if (!row) return;
@@ -1325,11 +1346,63 @@ function setColor(id, hex) {
   l.color = hex; touch(l); save(); buzz(8); closeSheet(); rerender();
 }
 
-/* ====================== 6g. Scrolling ======================
-   The whole detail page scrolls natively — touch anywhere and drag, just
-   like WhatsApp. The old custom side-scrollbar was removed because its fixed
-   touch strip on the right edge hijacked swipes and made scrolling feel
-   confined to a narrow lane. Native scrolling = the full screen is grabbable. */
+/* ====================== 6g. Scrolling + minimal scrollbar ======================
+   The whole detail page scrolls natively (body scroll, like WhatsApp).
+   A thin right-edge indicator appears while scrolling and can be dragged or
+   tapped to jump — it fades out 1.8 s after the last scroll event. */
+
+let scrollFadeT = null;
+function updateScrollBar() {
+  const bar = $('#scroll-bar');
+  if (!bar || view.name !== 'detail') return;
+  const totalH = document.body.scrollHeight;
+  const visH   = window.innerHeight;
+  if (totalH <= visH + 20) { bar.style.opacity = '0'; return; }
+  const trackH = bar.clientHeight;
+  const thumbEl = bar.firstElementChild;
+  const thumbH  = Math.max(28, (visH / totalH) * trackH);
+  const maxScroll = totalH - visH;
+  const frac    = maxScroll > 0 ? Math.min(1, window.scrollY / maxScroll) : 0;
+  thumbEl.style.height    = thumbH + 'px';
+  thumbEl.style.transform = `translateY(${frac * (trackH - thumbH)}px)`;
+  bar.style.opacity = '1';
+  clearTimeout(scrollFadeT);
+  scrollFadeT = setTimeout(() => { if (bar) bar.style.opacity = '0'; }, 1800);
+}
+
+function initScrollBar() {
+  const bar = $('#scroll-bar');
+  if (!bar) return;
+  bar.addEventListener('pointerdown', e => {
+    e.stopPropagation();
+    const thumb = bar.firstElementChild;
+    const barRect   = bar.getBoundingClientRect();
+    const thumbRect = thumb.getBoundingClientRect();
+    const totalH    = document.body.scrollHeight;
+    const visH      = window.innerHeight;
+    const maxScroll = totalH - visH;
+    if (e.clientY >= thumbRect.top - 4 && e.clientY <= thumbRect.bottom + 4) {
+      // Drag the thumb
+      const startY = e.clientY, startSY = window.scrollY;
+      const trackH = bar.clientHeight, thumbH = thumb.clientHeight;
+      bar.setPointerCapture(e.pointerId);
+      function onDrag(me) {
+        const dy = me.clientY - startY;
+        window.scrollTo({ top: startSY + (dy / (trackH - thumbH)) * maxScroll, behavior: 'instant' });
+      }
+      function onDragEnd() {
+        window.removeEventListener('pointermove', onDrag);
+        window.removeEventListener('pointerup', onDragEnd);
+      }
+      window.addEventListener('pointermove', onDrag, { passive: true });
+      window.addEventListener('pointerup', onDragEnd, { once: true });
+    } else {
+      // Tap on track → jump
+      const frac = (e.clientY - barRect.top) / barRect.height;
+      window.scrollTo({ top: frac * maxScroll, behavior: 'smooth' });
+    }
+  });
+}
 
 /* ====================== 6h. Toast ====================== */
 let toastT = null, toastFn = null;
@@ -1444,6 +1517,10 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { if (sheetOpen()) closeSheet(); else if (view.name === 'detail') navBack(); }
 });
 
+/* Scrollbar updates + drag-state safety cleanup */
+window.addEventListener('scroll', updateScrollBar, { passive: true });
+document.addEventListener('visibilitychange', () => { if (document.hidden && drag) onDragEnd(); });
+
 /* ====================== 7. Init ====================== */
 function init() {
   session = loadSession();      // restore account (if any) BEFORE loading its data
@@ -1472,6 +1549,7 @@ function init() {
   }
   refreshAccountUI();
   snapshotBadges();            // baseline so existing progress doesn't fire "unlocked" toasts on load
+  initScrollBar();
   showHome(false);
   syncSend();
   initAuth();                  // async; failures stay contained, app already usable
