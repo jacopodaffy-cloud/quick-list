@@ -21,7 +21,7 @@
 const $ = s => document.querySelector(s);
 const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const buzz = (p = 8) => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) { } };
+const buzz = (p = 8) => { try { if (settings && settings.haptics === false) return; navigator.vibrate && navigator.vibrate(p); } catch (e) { } };
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const norm = s => String(s).trim().toLowerCase();
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -80,8 +80,44 @@ const I = {
   refresh: ic('<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/>'),
   signout: ic('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>'),
   shield: ic('<path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/>'),
+  gear: ic('<circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l1.7-1.3-1.8-3.1-2 .8a7.6 7.6 0 0 0-2.6-1.5L14.4 2H9.6l-.3 2.4A7.6 7.6 0 0 0 6.7 6l-2-.8L2.9 8.2l1.7 1.3a7.8 7.8 0 0 0 0 3l-1.7 1.3 1.8 3.1 2-.8a7.6 7.6 0 0 0 2.6 1.5l.3 2.4h4.8l.3-2.4a7.6 7.6 0 0 0 2.6-1.5l2 .8 1.8-3.1Z"/>'),
+  trophy: ic('<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0Z"/><path d="M7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3"/>'),
+  medal: ic('<circle cx="12" cy="15" r="6"/><path d="m9 9-3-6M15 9l3-6M9.5 3h5"/><path d="m12 12 .9 1.9 2.1.3-1.5 1.5.4 2.1-1.9-1-1.9 1 .4-2.1L9 14.2l2.1-.3Z" fill="currentColor" stroke="none"/>'),
+  award: ic('<circle cx="12" cy="9" r="6"/><path d="m8.5 14-1.5 7 5-3 5 3-1.5-7"/>'),
+  sun: ic('<circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/>'),
+  moon: ic('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>'),
+  monitor: ic('<rect x="3" y="4" width="18" height="13" rx="2.5"/><path d="M8 21h8M12 17v4"/>'),
+  check: ic('<path d="m20 6-11 11-5-5"/>'),
 };
 const GOOGLE_G = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M22.5 12.2c0-.68-.06-1.36-.18-2.02H12v3.83h5.9a5.05 5.05 0 0 1-2.19 3.31v2.74h3.54c2.07-1.91 3.25-4.72 3.25-7.86z"/><path fill="#34A853" d="M12 23c2.94 0 5.42-.97 7.23-2.64l-3.54-2.74c-.98.66-2.24 1.05-3.69 1.05-2.84 0-5.25-1.92-6.11-4.5H2.23v2.83A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.89 14.17a6.6 6.6 0 0 1 0-4.34V7H2.23a11 11 0 0 0 0 9.99l3.66-2.82z"/><path fill="#EA4335" d="M12 4.75c1.6 0 3.04.55 4.18 1.62l3.13-3.13C17.42 1.46 14.94.5 12 .5A11 11 0 0 0 2.23 7l3.66 2.83C6.75 6.67 9.16 4.75 12 4.75z"/></svg>';
+
+/* ====================== Settings & theme ======================
+   Settings are device-level (not per-account): theme, haptics, and
+   whether you appear on the global ranking. Theme is also bootstrapped
+   in theme.js before first paint so there's no flash. */
+const SETTINGS_KEY = 'quicklist.settings';
+const DEFAULT_SETTINGS = { theme: 'system', haptics: true, leaderboard: true };
+let settings = loadSettings();
+function loadSettings() {
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch (e) { s = {}; }
+  const out = { ...DEFAULT_SETTINGS, ...(s && typeof s === 'object' ? s : {}) };
+  if (!['system', 'light', 'dark'].includes(out.theme)) out.theme = 'system';
+  out.haptics = out.haptics !== false;
+  out.leaderboard = out.leaderboard !== false;
+  return out;
+}
+function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { } }
+const prefersDark = () => !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+const effectiveDark = () => settings.theme === 'dark' || (settings.theme === 'system' && prefersDark());
+function applyTheme() {
+  const root = document.documentElement;
+  if (settings.theme === 'light' || settings.theme === 'dark') root.setAttribute('data-theme', settings.theme);
+  else root.removeAttribute('data-theme');
+  const tc = document.getElementById('tc');
+  if (tc) tc.setAttribute('content', effectiveDark() ? '#0D0E12' : '#F5F6F8');
+}
+function setTheme(t) { if (['system', 'light', 'dark'].includes(t)) { settings.theme = t; saveSettings(); applyTheme(); } }
 
 /* ====================== 2. Color system ====================== */
 const PALETTE = [
@@ -110,9 +146,15 @@ let session = null;   // { uid, email, username, provider } | null  (set in init
 const dataKeyFor = uid => 'quicklist.data.' + uid;
 const activeKey = () => session ? dataKeyFor(session.uid) : KEY;
 
-function blank() { return { v: 1, lists: [], nextColor: 0, sort: 'recent', filterColor: null, updatedAt: Date.now() }; }
+const newStats = () => ({ created: 0, completed: 0, checked: 0, since: Date.now() });
+function blank() { return { v: 1, lists: [], nextColor: 0, sort: 'recent', filterColor: null, stats: newStats(), updatedAt: Date.now() }; }
 const validColor = c => (PALETTE.some(p => p.hex === c) ? c : PALETTE[0].hex);
 const cleanId = id => (typeof id === 'string' && /^[\w-]{1,40}$/.test(id)) ? id : uid();
+function normStats(st) {
+  st = (st && typeof st === 'object') ? st : {};
+  const n = v => (Number.isFinite(v) && v >= 0) ? Math.min(Math.floor(v), 1e7) : 0;
+  return { created: n(st.created), completed: n(st.completed), checked: n(st.checked), since: Number.isFinite(st.since) ? st.since : Date.now() };
+}
 /* Deep sanitiser — every state that enters the app (storage, cloud pull,
    shared link, merge) passes through here: malformed dropped, oversized clamped. */
 function normalize(s) {
@@ -122,6 +164,7 @@ function normalize(s) {
     sort: ['recent', 'name', 'progress', 'color'].includes(s.sort) ? s.sort : 'recent',
     filterColor: PALETTE.some(p => p.hex === s.filterColor) ? s.filterColor : null,
     nextColor: Number.isFinite(s.nextColor) ? Math.max(0, Math.floor(s.nextColor)) : 0,
+    stats: normStats(s.stats),
     updatedAt: Number.isFinite(s.updatedAt) ? s.updatedAt : Date.now(),
     lists: s.lists.slice(0, MAX.lists)
       .filter(l => l && typeof l === 'object' && Array.isArray(l.items))
@@ -172,7 +215,7 @@ function tidySort(l) { if (!l.tidy) return; const u = l.items.filter(i => !i.don
 /* CRUD */
 function createList() {
   if (state.lists.length >= MAX.lists) { toast('You have reached the list limit'); return state.lists[0]; }
-  const l = mkList(); state.lists.unshift(l); save(); return l;
+  const l = mkList(); state.lists.unshift(l); bumpStat('created'); save(); checkBadges(); return l;
 }
 function deleteList(id) {
   const i = state.lists.findIndex(l => l.id === id); if (i < 0) return;
@@ -183,7 +226,7 @@ function deleteList(id) {
 function duplicateList(id) {
   const src = getList(id); if (!src) return;
   const copy = { ...src, id: uid(), pinned: false, title: src.title ? src.title + ' copy' : '', items: src.items.map(it => mkItem(it.text, it.done, it.qty)), createdAt: Date.now(), updatedAt: Date.now() };
-  state.lists.unshift(copy); save(); showDetail(copy.id); toast('List duplicated');
+  state.lists.unshift(copy); bumpStat('created'); save(); checkBadges(); showDetail(copy.id); toast('List duplicated');
 }
 function clearDone(id) {
   const l = getList(id); if (!l) return;
@@ -213,6 +256,51 @@ function seed() {
   ideas.items = ['Bike along the river', 'That new ramen place', 'Finish the book', 'Call mum'].map((t, i) => mkItem(t, i === 3));
   s.lists = [groc, trip, ideas]; s.nextColor = 3;
   return s;
+}
+
+/* ====================== 3c. Achievements (stats · badges · points) ======================
+   Stats live inside `state` so they persist on the device and sync with the
+   account. Points and badges are derived — no separate source of truth. */
+const statsOf = () => (state && state.stats) || newStats();
+function bumpStat(key, by = 1) {
+  if (!state.stats) state.stats = newStats();
+  state.stats[key] = (state.stats[key] || 0) + by;
+}
+const distinctColors = () => new Set((state.lists || []).map(l => l.color)).size;
+const listIsComplete = l => l.items.length > 0 && l.items.every(i => i.done);
+
+const BADGES = [
+  { id: 'starter',   icon: '🌱', name: 'First List',     desc: 'Create your first list',     goal: 1,   val: s => s.created },
+  { id: 'builder',   icon: '🧱', name: 'Builder',        desc: 'Create 10 lists',            goal: 10,  val: s => s.created },
+  { id: 'architect', icon: '🏗️', name: 'Architect',      desc: 'Create 50 lists',            goal: 50,  val: s => s.created },
+  { id: 'closer',    icon: '✅', name: 'Closer',         desc: 'Complete a whole list',      goal: 1,   val: s => s.completed },
+  { id: 'roll',      icon: '🔥', name: 'On a Roll',      desc: 'Complete 5 lists',           goal: 5,   val: s => s.completed },
+  { id: 'champion',  icon: '🏆', name: 'Champion',       desc: 'Complete 25 lists',          goal: 25,  val: s => s.completed },
+  { id: 'legend',    icon: '👑', name: 'Legend',         desc: 'Complete 100 lists',         goal: 100, val: s => s.completed },
+  { id: 'ticker',    icon: '☑️', name: 'Ticker',         desc: 'Check off 50 items',         goal: 50,  val: s => s.checked },
+  { id: 'centurion', icon: '💯', name: 'Centurion',      desc: 'Check off 250 items',        goal: 250, val: s => s.checked },
+  { id: 'rainbow',   icon: '🌈', name: 'Full Spectrum',  desc: 'Use all 10 colours',         goal: 10,  val: () => distinctColors() },
+];
+const badgeValue = b => Math.min(b.val(statsOf()), b.goal);
+const badgeEarned = b => b.val(statsOf()) >= b.goal;
+const earnedCount = () => BADGES.filter(badgeEarned).length;
+function points() { const s = statsOf(); return (s.completed || 0) * 15 + (s.created || 0) * 3 + (s.checked || 0); }
+function levelOf(p = points()) { return Math.floor(Math.sqrt(p / 25)) + 1; }   // gentle curve: 1,2,3 at 0/25/100/225…
+
+/* Celebrate a badge the first time it is earned (per session). Snapshot the
+   already-earned set at load so reopening the app doesn't re-toast. */
+let seenBadges = null;
+function snapshotBadges() { seenBadges = new Set(BADGES.filter(badgeEarned).map(b => b.id)); }
+function checkBadges() {
+  if (!seenBadges) { snapshotBadges(); schedulePublishRank(); return; }
+  for (const b of BADGES) {
+    if (badgeEarned(b) && !seenBadges.has(b.id)) {
+      seenBadges.add(b.id);
+      buzz(18);
+      toast(`${b.icon} Badge unlocked — ${b.name}`, 'View', () => { achvTab = 'badges'; openAchievementsSheet(); });
+    }
+  }
+  schedulePublishRank();
 }
 
 /* ====================== 3b. Accounts & Sync ======================
@@ -300,6 +388,63 @@ async function cloudPush() {
   try { const c = await ensureCloud(); await c.fs.setDoc(c.fs.doc(c.db, 'users', session.uid), JSON.parse(JSON.stringify(state))); }
   catch (e) { /* offline — kept in local cache, retried on next change */ }
 }
+
+/* ---- registration database: a profile record per signed-up user ----
+   Lives at profiles/{uid}, separate from the list data at users/{uid}, so
+   it survives every data push. Holds only identity + timestamps (no list
+   content). createdAt is written once; lastLoginAt updates every sign-in. */
+async function writeProfile(user) {
+  if (!CLOUD_ENABLED || !user || user.provider !== 'cloud') return;
+  try {
+    const c = await ensureCloud();
+    const ref = c.fs.doc(c.db, 'profiles', user.uid);
+    let exists = false;
+    try { exists = (await c.fs.getDoc(ref)).exists(); } catch (e) { }
+    const rec = {
+      uid: user.uid,
+      email: cleanText(user.email || '', MAX.email),
+      displayName: cleanText(user.username || '', MAX.user),
+      provider: user.provider,
+      lastLoginAt: Date.now(),
+    };
+    if (!exists) rec.createdAt = Date.now();
+    await c.fs.setDoc(ref, rec, { merge: true });
+  } catch (e) { /* profile is best-effort; never block sign-in on it */ }
+}
+
+/* ---- global ranking (opt-in) ----
+   Publishes only a display name + score to leaderboard/{uid}. No email, no
+   list content. Controlled by the Settings → "Show me on the ranking" toggle. */
+let rankTimer = null;
+function schedulePublishRank() {
+  if (!session || session.provider !== 'cloud' || !settings.leaderboard) return;
+  clearTimeout(rankTimer); rankTimer = setTimeout(publishLeaderboard, 1500);
+}
+async function publishLeaderboard() {
+  if (!session || session.provider !== 'cloud' || !settings.leaderboard) return;
+  try {
+    const c = await ensureCloud();
+    await c.fs.setDoc(c.fs.doc(c.db, 'leaderboard', session.uid), {
+      uid: session.uid,
+      name: cleanText(session.username || 'Anonymous', MAX.user) || 'Anonymous',
+      points: points(),
+      completed: statsOf().completed || 0,
+      badges: earnedCount(),
+      updatedAt: Date.now(),
+    });
+  } catch (e) { /* offline — retried on next change */ }
+}
+async function removeFromLeaderboard() {
+  if (!CLOUD_ENABLED || !session || session.provider !== 'cloud') return;
+  try { const c = await ensureCloud(); await c.fs.deleteDoc(c.fs.doc(c.db, 'leaderboard', session.uid)); } catch (e) { }
+}
+async function fetchLeaderboard(max = 100) {
+  const c = await ensureCloud();
+  const q = c.fs.query(c.fs.collection(c.db, 'leaderboard'), c.fs.orderBy('points', 'desc'), c.fs.limit(max));
+  const snap = await c.fs.getDocs(q);
+  const rows = []; snap.forEach(d => { const v = d.data(); if (v && Number.isFinite(v.points)) rows.push(v); });
+  return rows;
+}
 function editingNow() {
   const a = document.activeElement;
   return a && (a.id === 'detail-title' || a.classList.contains('item-edit') || a.id === 'add-input' || a.id === 'home-search');
@@ -330,7 +475,22 @@ function mergeStates(primary, secondary) {
     const ex = map.get(l.id);
     if (!ex || (l.updatedAt || 0) > (ex.updatedAt || 0)) map.set(l.id, l);
   }
-  return { ...a, lists: [...map.values()].sort((x, y) => (y.updatedAt || 0) - (x.updatedAt || 0)), updatedAt: Date.now() };
+  // Achievement counters are cumulative and monotonic — take the max across
+  // devices so progress (points/badges) is never lost or double-counted on sync.
+  const sa = normStats(a.stats), sb = normStats(b.stats);
+  const stats = {
+    created: Math.max(sa.created, sb.created),
+    completed: Math.max(sa.completed, sb.completed),
+    checked: Math.max(sa.checked, sb.checked),
+    since: Math.min(sa.since, sb.since),
+  };
+  return {
+    ...a,
+    lists: [...map.values()].sort((x, y) => (y.updatedAt || 0) - (x.updatedAt || 0)),
+    stats,
+    nextColor: Math.max(a.nextColor || 0, b.nextColor || 0),
+    updatedAt: Date.now(),
+  };
 }
 async function activateSession(user, { adoptGuest = false } = {}) {
   session = user; saveSession(session);
@@ -345,29 +505,39 @@ async function activateSession(user, { adoptGuest = false } = {}) {
   }
   state = normalize(base) || blank();
   writeData(activeKey(), state);
-  if (user.provider === 'cloud') { cloudPush(); cloudSubscribe(); }
+  snapshotBadges();                                  // baseline for this account (no false "unlocked" toasts)
+  if (user.provider === 'cloud') { cloudPush(); cloudSubscribe(); writeProfile(user); schedulePublishRank(); }
   refreshAccountUI();
 }
 function endSession() {
   if (cloudUnsub) { cloudUnsub(); cloudUnsub = null; }
   if (cloud && cloud.auth && cloud.auth.currentUser) cloud.authm.signOut(cloud.auth).catch(() => { });
   session = null; saveSession(null);
-  state = load(); refreshAccountUI();
+  state = load(); snapshotBadges(); refreshAccountUI();
 }
 
 /* ---- auth actions invoked by the UI ---- */
 async function doGoogle() {
   const c = await ensureCloud();
   const provider = new c.authm.GoogleAuthProvider();
-  // Use redirect on mobile/WebView, popup on desktop
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.Capacitor;
-  if (isMobile) {
-    await c.authm.signInWithRedirect(c.auth, provider);
-    return;
+  provider.setCustomParameters({ prompt: 'select_account' });
+  // Popup first — it works in nearly every modern browser (mobile included) and,
+  // unlike redirect, doesn't depend on third-party cookies on the auth domain
+  // (which is exactly what made Google sign-in fail on GitHub Pages). If the
+  // popup is blocked or unsupported (in-app WebViews, strict blockers), fall
+  // back to a full-page redirect; getRedirectResult (in ensureCloud) finishes it.
+  try {
+    const res = await c.authm.signInWithPopup(c.auth, provider);
+    const u = res.user;
+    await activateSession({ uid: u.uid, email: u.email || '', username: u.displayName || (u.email || 'You').split('@')[0], provider: 'cloud' }, { adoptGuest: true });
+  } catch (e) {
+    const code = (e && e.code) || '';
+    if (/popup-blocked|operation-not-supported-in-this-environment|web-storage-unsupported|missing-or-invalid-nonce/i.test(code)) {
+      await c.authm.signInWithRedirect(c.auth, provider);   // page navigates away
+      return;
+    }
+    throw e;   // popup-closed-by-user, network, etc. → surface a real message
   }
-  const res = await c.authm.signInWithPopup(c.auth, provider);
-  const u = res.user;
-  await activateSession({ uid: u.uid, email: u.email || '', username: u.displayName || (u.email || 'You').split('@')[0], provider: 'cloud' }, { adoptGuest: true });
 }
 async function doEmailAuth(mode, f) {
   if (CLOUD_ENABLED) {
@@ -411,8 +581,10 @@ async function deleteAccount() {
   try {
     if (cur.provider === 'cloud') {
       const c = await ensureCloud();
-      try { await c.fs.deleteDoc(c.fs.doc(c.db, 'users', cur.uid)); } catch (e) { }   // remove data from the database
-      if (c.auth.currentUser) await c.authm.deleteUser(c.auth.currentUser);            // remove the auth identity
+      try { await c.fs.deleteDoc(c.fs.doc(c.db, 'users', cur.uid)); } catch (e) { }        // list data
+      try { await c.fs.deleteDoc(c.fs.doc(c.db, 'profiles', cur.uid)); } catch (e) { }     // registration record
+      try { await c.fs.deleteDoc(c.fs.doc(c.db, 'leaderboard', cur.uid)); } catch (e) { }  // ranking entry
+      if (c.auth.currentUser) await c.authm.deleteUser(c.auth.currentUser);                // the auth identity
     } else {
       const accts = readAccounts(); delete accts[cur.uid]; writeAccounts(accts);
     }
@@ -470,11 +642,114 @@ function openProfileSheet() {
       <div class="menu-sep"></div>
       <button class="menu-item danger" data-auth="delete-account">${I.trash} Delete account</button>
     </div>
-    ${!isCloud && CLOUD_ENABLED ? '' : (!isCloud ? `<p class="auth-foot">${I.shield}<span>Enable cloud config to sync this account to other devices — see SETUP-ACCOUNTS.md.</span></p>` : '')}
+    ${!isCloud && CLOUD_ENABLED ? `<p class="auth-foot">${I.shield}<span>This account is on this device only. Sign in with Google or a cloud email account for cross-device sync.</span></p>` : ''}
   `);
 }
+/* ---- Settings ---- */
+function openSettingsSheet() {
+  const t = settings.theme;
+  const opt = (val, icon, label) => `<button class="seg-btn ${t === val ? 'on' : ''}" data-set-theme="${val}">${icon}<span>${label}</span></button>`;
+  openSheet(`
+    <h2 class="sheet-title">Settings</h2>
+    <p class="sheet-sub">Personalise QuickList on this device.</p>
+    <p class="field-label">Appearance</p>
+    <div class="seg seg-theme">
+      ${opt('system', I.monitor, 'System')}
+      ${opt('light', I.sun, 'Light')}
+      ${opt('dark', I.moon, 'Dark')}
+    </div>
+    <div class="set-list">
+      <div class="set-row">
+        <div class="set-label"><div class="set-title">Haptic feedback</div><div class="set-desc">Subtle vibrations on taps and actions.</div></div>
+        <button class="toggle ${settings.haptics ? 'on' : ''}" data-auth="toggle-haptics" role="switch" aria-checked="${settings.haptics}" aria-label="Haptic feedback"></button>
+      </div>
+      <div class="set-row">
+        <div class="set-label"><div class="set-title">Show me on the global ranking</div><div class="set-desc">Shares only your display name and score — never your email or list contents.${CLOUD_ENABLED ? '' : ' Needs an account with cloud sync.'}</div></div>
+        <button class="toggle ${settings.leaderboard ? 'on' : ''}" data-auth="toggle-leaderboard" role="switch" aria-checked="${settings.leaderboard}" aria-label="Show me on the global ranking"></button>
+      </div>
+    </div>
+    <button class="btn btn-ghost btn-block" style="margin-top:14px" data-auth="close">${I.check}<span>Done</span></button>
+    <p class="auth-foot">${I.shield}<span>Settings stay on this device and are never uploaded.</span></p>
+  `);
+}
+
+/* ---- Achievements (its own full-height screen: Badges + Ranking) ---- */
+let achvTab = 'badges';
+function badgesHTML() {
+  return `<div class="badge-grid">` + BADGES.map(b => {
+    const earned = badgeEarned(b);
+    const pct = Math.round(badgeValue(b) / b.goal * 100);
+    return `<div class="badge-card ${earned ? 'earned' : 'locked'}">
+      ${earned ? `<span class="badge-check">${I.check}</span>` : ''}
+      <span class="badge-ic">${b.icon}</span>
+      <span class="badge-name">${esc(b.name)}</span>
+      <span class="badge-desc">${esc(b.desc)}</span>
+      ${earned ? '' : `<span class="badge-prog"><i style="width:${pct}%"></i></span>`}
+    </div>`;
+  }).join('') + `</div>`;
+}
+function rankingHTML() {
+  if (!CLOUD_ENABLED || !session || session.provider !== 'cloud') {
+    return `<div class="rank-empty">${session
+      ? 'This account is saved on this device only.<br>Sign in with Google or a cloud email account to join the global ranking.'
+      : 'Sign in to climb the leaderboard and compete with QuickList players everywhere.'}<br><br>
+      <button class="btn btn-c" style="--c:#5A63E0;--on:#fff" data-auth="go-signin">${session ? 'Manage account' : 'Sign in to compete'}</button></div>`;
+  }
+  return `${settings.leaderboard ? '' : `<p class="rank-empty" style="padding:6px 10px 14px">You're hidden from the ranking — turn it on in Settings.</p>`}
+    <div class="rank-list" id="rank-list"><div class="rank-empty">Loading the leaderboard…</div></div>`;
+}
+function fillRanking() {
+  if (!CLOUD_ENABLED || !session || session.provider !== 'cloud') return;
+  fetchLeaderboard(100).then(rows => {
+    const el = $('#rank-list'); if (!el) return;
+    const medals = ['🥇', '🥈', '🥉'];
+    if (!rows.length) { el.innerHTML = `<div class="rank-empty">No one's on the board yet — be the first!<br>Your points: <b>${points().toLocaleString()}</b></div>`; return; }
+    el.innerHTML = rows.map((r, i) => {
+      const me = r.uid === session.uid, rank = i + 1;
+      const av = (cleanText(r.name || '?', MAX.user).trim()[0] || '?').toUpperCase();
+      return `<div class="rank-row ${me ? 'me' : ''}">
+        <span class="rank-num ${rank <= 3 ? 'top' : ''}">${rank <= 3 ? medals[rank - 1] : rank}</span>
+        <span class="rank-av">${esc(av)}</span>
+        <span class="rank-id"><div class="rank-name">${esc(r.name || 'Anonymous')}${me ? ' · you' : ''}</div><div class="rank-sub">${(r.badges || 0)} badges · ${(r.completed || 0)} completed</div></span>
+        <span class="rank-pts">${(r.points || 0).toLocaleString()}</span>
+      </div>`;
+    }).join('');
+  }).catch(() => { const el = $('#rank-list'); if (el) el.innerHTML = `<div class="rank-empty">Couldn't load the ranking right now — check your connection and try again.</div>`; });
+}
+function openAchievementsSheet() {
+  const tab = achvTab;
+  openSheet(`
+    <div class="achv-head">
+      <div class="stat-points"><b>${points().toLocaleString()}</b><span>points</span><span class="stat-level">Level ${levelOf()}</span></div>
+      <p class="achv-sub">${earnedCount()} of ${BADGES.length} badges unlocked</p>
+    </div>
+    <div class="seg seg-ico">
+      <button class="seg-btn ${tab === 'badges' ? 'on' : ''}" data-achv-tab="badges">${I.medal}<span>Badges</span></button>
+      <button class="seg-btn ${tab === 'ranking' ? 'on' : ''}" data-achv-tab="ranking">${I.trophy}<span>Ranking</span></button>
+    </div>
+    <div id="achv-body">${tab === 'badges' ? badgesHTML() : rankingHTML()}</div>
+  `, { tall: true });
+  if (tab === 'ranking') fillRanking();
+}
+function setAchvTab(tab) {
+  achvTab = tab;
+  const body = $('#achv-body'); if (!body) return;
+  body.innerHTML = tab === 'badges' ? badgesHTML() : rankingHTML();
+  [...document.querySelectorAll('[data-achv-tab]')].forEach(b => b.classList.toggle('on', b.dataset.achvTab === tab));
+  if (tab === 'ranking') fillRanking();
+}
+
 async function handleAuth(kind) {
   if (kind === 'toggle') { authMode = authMode === 'signin' ? 'signup' : 'signin'; return openAccountSheet(); }
+  if (kind === 'close') return closeSheet();
+  if (kind === 'go-signin') { authMode = 'signin'; return openAccountSheet(); }
+  if (kind === 'toggle-haptics') { settings.haptics = !settings.haptics; saveSettings(); buzz(12); return openSettingsSheet(); }
+  if (kind === 'toggle-leaderboard') {
+    settings.leaderboard = !settings.leaderboard; saveSettings();
+    if (settings.leaderboard) { publishLeaderboard(); toast('You\'re on the ranking'); }
+    else { removeFromLeaderboard(); toast('Hidden from the ranking'); }
+    return openSettingsSheet();
+  }
   if (kind === 'guest') { closeSheet(); return; }
   if (kind === 'signout') { closeSheet(); endSession(); showHome(false); toast('Signed out'); return; }
   if (kind === 'sync') {
@@ -600,7 +875,7 @@ function showHome(push = false) {
   $('#page-detail').hidden = true;
   const h = $('#page-home'); h.hidden = false;
   h.style.animation = 'none'; void h.offsetWidth; h.style.animation = '';
-  renderHome(); window.scrollTo(0, 0); hideScrollTrack();
+  renderHome(); window.scrollTo(0, 0);
   if (push) pushNav({ v: 'home' });
 }
 function showDetail(id, push = true) {
@@ -612,8 +887,6 @@ function showDetail(id, push = true) {
   $('#add-input').value = ''; syncSend();
   renderDetail();
   requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
-  // Always show scrollbar immediately on detail page
-  setTimeout(() => { if (view.name === 'detail') updateScrollTrack(); }, 180);
   if (push) pushNav({ v: 'detail', id });
 }
 const rerender = () => view.name === 'detail' ? renderDetail() : renderHome();
@@ -912,7 +1185,11 @@ function cleanupSwipe() {
 function toggleItem(itemId) {
   const l = getList(view.id); if (!l) return;
   const it = l.items.find(i => i.id === itemId); if (!it) return;
+  const wasComplete = listIsComplete(l);
   it.done = !it.done; touch(l);
+  if (it.done) bumpStat('checked');
+  const nowComplete = listIsComplete(l);
+  if (nowComplete && !wasComplete) bumpStat('completed');
   if (l.tidy) { tidySort(l); save(); noAnim = true; renderDetail(); }
   else {
     save();
@@ -923,7 +1200,8 @@ function toggleItem(itemId) {
   const done = l.items.filter(i => i.done).length, total = l.items.length;
   $('#progress-fill').style.width = Math.round(done / total * 100) + '%';
   $('#detail-meta').innerHTML = `<span class="chip-color"></span>${done} of ${total} done${l.pinned ? ' · pinned' : ''}`;
-  if (done === total && total > 0) toast('List complete ✓');
+  if (nowComplete && !wasComplete) toast('List complete ✓');
+  checkBadges();
 }
 function deleteItem(itemId) {
   const l = getList(view.id); if (!l) return;
@@ -977,9 +1255,9 @@ async function copyList(id) {
 
 /* ====================== 6f. Sheets ====================== */
 const sheetOpen = () => !!$('#sheet-root').firstElementChild;
-function openSheet(html) {
+function openSheet(html, opts = {}) {
   if (sheetOpen()) closeSheetNow(true); else pushNav({ v: 'sheet' });
-  $('#sheet-root').innerHTML = `<div class="sheet" role="dialog" aria-modal="true"><div class="handle-bar"></div>${html}</div>`;
+  $('#sheet-root').innerHTML = `<div class="sheet${opts.tall ? ' sheet-tall' : ''}" role="dialog" aria-modal="true"><div class="handle-bar"></div>${html}</div>`;
   const bd = $('#backdrop'); bd.hidden = false;
   requestAnimationFrame(() => { $('#sheet-root').firstElementChild.classList.add('show'); bd.classList.add('show'); });
 }
@@ -1047,67 +1325,11 @@ function setColor(id, hex) {
   l.color = hex; touch(l); save(); buzz(8); closeSheet(); rerender();
 }
 
-/* ====================== 6g. Scroll track ====================== */
-let scrollTrackTimer = null;
-function updateScrollTrack() {
-  if (view.name !== 'detail') return;
-  const track = $('#scroll-track');
-  if (!track) return;
-  const sh = document.body.scrollHeight, wh = window.innerHeight;
-  const scrollable = sh > wh + 16;
-  const trackH = track.offsetHeight || (wh - 180);
-  const thumbH = scrollable ? Math.max(36, trackH * (wh / sh)) : trackH * 0.9;
-  const thumbTop = scrollable ? (window.scrollY / (sh - wh)) * (trackH - thumbH) : 0;
-  const thumb = track.querySelector('.scroll-thumb');
-  if (thumb) { thumb.style.height = thumbH + 'px'; thumb.style.top = thumbTop + 'px'; }
-  // Always visible on detail page: full when scrolling, 0.35 at rest, 0.2 when not scrollable
-  if (!scrollable) { track.style.opacity = '0.2'; return; }
-  track.style.opacity = '1';
-  clearTimeout(scrollTrackTimer);
-  scrollTrackTimer = setTimeout(() => { if (track && !thumbDrag) track.style.opacity = '0.45'; }, 1000);
-}
-function hideScrollTrack() { const t = $('#scroll-track'); if (t) t.style.opacity = '0'; }
-
-/* ====================== 6g-2. Draggable scroll thumb ====================== */
-let thumbDrag = null;
-function initScrollThumb() {
-  // Pointerdown on the thumb — start drag (passive: never blocks scroll)
-  document.addEventListener('pointerdown', e => {
-    const th = e.target.closest('.scroll-thumb');
-    if (!th) return;
-    const track = $('#scroll-track');
-    if (!track) return;
-    const sh = document.body.scrollHeight, wh = window.innerHeight;
-    if (sh <= wh) return;
-    const trackH = track.getBoundingClientRect().height;
-    const thumbH = Math.max(36, trackH * (wh / sh));
-    thumbDrag = { startY: e.clientY, startScroll: window.scrollY, trackH, thumbH, sh, wh };
-    try { th.setPointerCapture(e.pointerId); } catch (_) {}
-    th.classList.add('dragging');
-    track.style.opacity = '1';
-    clearTimeout(scrollTrackTimer);
-  }, { passive: true });
-
-  // Pointermove — translate drag distance to scroll position
-  document.addEventListener('pointermove', e => {
-    if (!thumbDrag) return;
-    const dy = e.clientY - thumbDrag.startY;
-    const scrollRange = thumbDrag.sh - thumbDrag.wh;
-    const trackRange = thumbDrag.trackH - thumbDrag.thumbH;
-    if (trackRange <= 0) return;
-    window.scrollTo({ top: clamp(thumbDrag.startScroll + dy / trackRange * scrollRange, 0, scrollRange), behavior: 'instant' });
-  }, { passive: true });
-
-  // Pointerup — end drag, keep thumb faintly visible
-  document.addEventListener('pointerup', () => {
-    if (!thumbDrag) return;
-    const th = document.querySelector('.scroll-thumb');
-    if (th) th.classList.remove('dragging');
-    thumbDrag = null;
-    clearTimeout(scrollTrackTimer);
-    scrollTrackTimer = setTimeout(() => { const t = $('#scroll-track'); if (t && view.name === 'detail') t.style.opacity = '0.45'; }, 1000);
-  });
-}
+/* ====================== 6g. Scrolling ======================
+   The whole detail page scrolls natively — touch anywhere and drag, just
+   like WhatsApp. The old custom side-scrollbar was removed because its fixed
+   touch strip on the right edge hijacked swipes and made scrolling feel
+   confined to a narrow lane. Native scrolling = the full screen is grabbable. */
 
 /* ====================== 6h. Toast ====================== */
 let toastT = null, toastFn = null;
@@ -1121,9 +1343,11 @@ function toast(msg, actionLabel, fn) {
 
 /* ====================== Event wiring ====================== */
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-open],[data-menu],[data-new],[data-act],[data-color],[data-check],[data-qty],[data-del],[data-sort],[data-filter],[data-clear-filters],[data-toast-action],[data-auth]');
+  const t = e.target.closest('[data-open],[data-menu],[data-new],[data-act],[data-color],[data-check],[data-qty],[data-del],[data-sort],[data-filter],[data-clear-filters],[data-toast-action],[data-auth],[data-set-theme],[data-achv-tab]');
   if (!t) return;
 
+  if (t.dataset.setTheme) { setTheme(t.dataset.setTheme); buzz(8); return openSettingsSheet(); }
+  if (t.dataset.achvTab) { buzz(6); return setAchvTab(t.dataset.achvTab); }
   if (t.dataset.auth) return handleAuth(t.dataset.auth);
   if (t.dataset.menu) { e.stopPropagation(); return openListMenu(t.dataset.menu); }
   if (t.hasAttribute('data-open')) return showDetail(t.dataset.open);
@@ -1162,6 +1386,8 @@ document.addEventListener('click', e => {
 
 $('#fab').addEventListener('click', () => { const l = createList(); showDetail(l.id); setTimeout(() => $('#add-input').focus(), 320); });
 $('#sort-btn').addEventListener('click', openFindSheet);
+$('#achv-btn').addEventListener('click', () => { achvTab = 'badges'; openAchievementsSheet(); });
+$('#settings-btn').addEventListener('click', openSettingsSheet);
 $('#avatar').addEventListener('click', () => { authMode = 'signin'; openAccountSheet(); });
 document.addEventListener('submit', e => {
   if (e.target.id === 'auth-form') { e.preventDefault(); handleAuthSubmit(e.target); }
@@ -1231,6 +1457,8 @@ function init() {
   $('#detail-whatsapp').innerHTML = I.whatsapp;
   $('#detail-menu').innerHTML = I.dots;
   $('#sort-btn').innerHTML = I.sliders;
+  $('#achv-btn').innerHTML = I.trophy;
+  $('#settings-btn').innerHTML = I.gear;
   $('#search-ic').innerHTML = I.search;
   $('#search-clear').innerHTML = I.x;
   $('#mic').innerHTML = I.mic;
@@ -1238,13 +1466,16 @@ function init() {
   $('#fab-icon').innerHTML = I.plus;
   if (!SR) $('#mic').style.display = 'none';
 
+  applyTheme();                // re-assert saved theme + sync the address-bar colour
+  if (window.matchMedia) {     // keep "System" theme live if the OS flips light/dark
+    try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (settings.theme === 'system') applyTheme(); }); } catch (e) { }
+  }
   refreshAccountUI();
+  snapshotBadges();            // baseline so existing progress doesn't fire "unlocked" toasts on load
   showHome(false);
   syncSend();
   initAuth();                  // async; failures stay contained, app already usable
 
-  window.addEventListener('scroll', updateScrollTrack, { passive: true });
-  initScrollThumb();
   try { if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js'); } catch (e) { }
 }
 try { init(); } catch (err) { showFatal(err); }
