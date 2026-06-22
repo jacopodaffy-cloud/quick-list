@@ -80,7 +80,7 @@ const I = {
   refresh: ic('<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/>'),
   signout: ic('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>'),
   shield: ic('<path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/>'),
-  gear: ic('<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>'),
+  gear: ic('<circle cx="12" cy="12" r="3.4"/><path d="M10.6 3.1a1.2 1.2 0 0 1 1.18-.98h.44a1.2 1.2 0 0 1 1.18.98l.23 1.27c.5.16.97.43 1.38.78l1.22-.45a1.2 1.2 0 0 1 1.46.53l.4.7c.3.5.2 1.14-.23 1.53l-.97.86c.07.52.07 1.05 0 1.57l.97.86c.44.39.54 1.03.24 1.53l-.4.7a1.2 1.2 0 0 1-1.47.53l-1.22-.45c-.41.35-.88.62-1.38.78l-.23 1.27a1.2 1.2 0 0 1-1.18.98h-.44a1.2 1.2 0 0 1-1.18-.98l-.23-1.27a5.6 5.6 0 0 1-1.38-.78l-1.22.45a1.2 1.2 0 0 1-1.46-.53l-.4-.7a1.2 1.2 0 0 1 .23-1.53l.97-.86a5.7 5.7 0 0 1 0-1.57l-.97-.86a1.2 1.2 0 0 1-.24-1.53l.4-.7a1.2 1.2 0 0 1 1.47-.53l1.22.45c.41-.35.88-.62 1.38-.78l.23-1.27Z"/>'),
   trophy: ic('<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0Z"/><path d="M7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3"/>'),
   medal: ic('<circle cx="12" cy="15" r="6"/><path d="m9 9-3-6M15 9l3-6M9.5 3h5"/><path d="m12 12 .9 1.9 2.1.3-1.5 1.5.4 2.1-1.9-1-1.9 1 .4-2.1L9 14.2l2.1-.3Z" fill="currentColor" stroke="none"/>'),
   award: ic('<circle cx="12" cy="9" r="6"/><path d="m8.5 14-1.5 7 5-3 5 3-1.5-7"/>'),
@@ -872,8 +872,8 @@ window.addEventListener('popstate', e => {
 
 function showHome(push = false) {
   view.name = 'home'; view.id = null;
+  document.body.classList.remove('fmt-on');
   $('#page-detail').hidden = true;
-  const sb = $('#scroll-bar'); if (sb) sb.style.opacity = '0';
   const h = $('#page-home'); h.hidden = false;
   h.style.animation = 'none'; void h.offsetWidth; h.style.animation = '';
   renderHome(); window.scrollTo(0, 0);
@@ -886,8 +886,9 @@ function showDetail(id, push = true) {
   const d = $('#page-detail'); d.hidden = false;
   d.style.animation = 'none'; void d.offsetWidth; d.style.animation = '';
   $('#add-input').value = ''; syncSend();
+  document.body.classList.remove('fmt-on');
   renderDetail();
-  requestAnimationFrame(() => { window.scrollTo({ top: 0, behavior: 'instant' }); updateScrollBar(); });
+  requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
   if (push) pushNav({ v: 'detail', id });
 }
 const rerender = () => view.name === 'detail' ? renderDetail() : renderHome();
@@ -919,6 +920,16 @@ function previewItems(l, q) {
 }
 const hl = (text, q) => q ? esc(text).replace(new RegExp(`(${reEsc(q)})`, 'ig'), '<mark>$1</mark>') : esc(text);
 
+/* Inline text formatting for list items: **bold** and __underline__,
+   combinable as **__both__**. The text is ESCAPED first and the tags are
+   introduced only afterwards, so nothing the user types can inject HTML. */
+function fmtText(s) {
+  return esc(s)
+    .replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__([^_]+?)__/g, '<u>$1</u>');
+}
+const stripFmt = s => String(s == null ? '' : s).replace(/\*\*([^*]+?)\*\*/g, '$1').replace(/__([^_]+?)__/g, '$1');
+
 function ListCard(l) {
   const done = l.items.filter(i => i.done).length, total = l.items.length;
   const pct = total ? Math.round(done / total * 100) : 0;
@@ -930,7 +941,7 @@ function ListCard(l) {
     </span>
     <span class="card-title ${t ? '' : 'untitled'}">${t ? hl(t, q) : 'Untitled'}</span>
     ${total ? `<span class="card-preview">${previewItems(l, q).map(it =>
-      `<span class="pl ${it.done ? 'done' : ''}">${hl(it.text, q)}</span>`).join('')}</span>` : ''}
+      `<span class="pl ${it.done ? 'done' : ''}">${hl(stripFmt(it.text), q)}</span>`).join('')}</span>` : ''}
     <span class="card-foot">
       <span class="card-bar"><i style="width:${pct}%"></i></span>
       <span class="card-count">${total ? `${done}/${total}` : 'empty'}</span>
@@ -942,8 +953,8 @@ function ItemRow(it) {
   return `<div class="item-wrap">
     <div class="item ${it.done ? 'done' : ''}" data-id="${it.id}">
       <span class="handle" data-handle aria-label="Drag to reorder">${I.grip}</span>
-      <button class="check" data-check="${it.id}" role="checkbox" aria-checked="${it.done}" aria-label="${esc(it.text)}">${I.tick}</button>
-      <span class="item-text" data-edit="${it.id}"><span class="tx">${esc(it.text)}</span></span>
+      <button class="check" data-check="${it.id}" role="checkbox" aria-checked="${it.done}" aria-label="${esc(stripFmt(it.text))}">${I.tick}</button>
+      <span class="item-text" data-edit="${it.id}"><span class="tx">${fmtText(it.text)}</span></span>
       <button class="item-del" data-del="${it.id}" aria-label="Delete item">${I.trash}</button>
       ${it.qty > 1 ? `<button class="qty" data-qty="${it.id}" aria-label="Quantity ${it.qty}, tap to add one">×${it.qty}</button>` : ''}
     </div>
@@ -999,7 +1010,10 @@ function renderDetail() {
   const wrap = $('#items');
   if (total) {
     wrap.innerHTML = l.items.map(ItemRow).join('');
-    [...wrap.querySelectorAll('.item')].forEach((r, i) => { if (!noAnim) r.style.animationDelay = Math.min(i * 26, 160) + 'ms'; else r.style.animation = 'none'; });
+    // Long lists: skip the staggered entry animation entirely — keeps scrolling
+    // and toggling snappy even with hundreds of rows.
+    const animate = !noAnim && total <= 40;
+    [...wrap.querySelectorAll('.item')].forEach((r, i) => { if (animate) r.style.animationDelay = Math.min(i * 26, 160) + 'ms'; else r.style.animation = 'none'; });
   } else wrap.innerHTML = '';
   noAnim = false;
 
@@ -1255,7 +1269,7 @@ function listToText(l) {
   const lines = [];
   const t = l.title.trim();
   if (t) { lines.push(t); lines.push(''); }
-  l.items.forEach(it => lines.push((it.done ? '✓ ' : '• ') + it.text + (it.qty > 1 ? ` ×${it.qty}` : '')));
+  l.items.forEach(it => lines.push((it.done ? '✓ ' : '• ') + stripFmt(it.text) + (it.qty > 1 ? ` ×${it.qty}` : '')));
   return lines.join('\n');
 }
 function shareWhatsApp(id) {
@@ -1351,58 +1365,13 @@ function setColor(id, hex) {
    A thin right-edge indicator appears while scrolling and can be dragged or
    tapped to jump — it fades out 1.8 s after the last scroll event. */
 
-let scrollFadeT = null;
-function updateScrollBar() {
-  const bar = $('#scroll-bar');
-  if (!bar || view.name !== 'detail') return;
-  const totalH = document.body.scrollHeight;
-  const visH   = window.innerHeight;
-  if (totalH <= visH + 20) { bar.style.opacity = '0'; return; }
-  const trackH = bar.clientHeight;
-  const thumbEl = bar.firstElementChild;
-  const thumbH  = Math.max(28, (visH / totalH) * trackH);
-  const maxScroll = totalH - visH;
-  const frac    = maxScroll > 0 ? Math.min(1, window.scrollY / maxScroll) : 0;
-  thumbEl.style.height    = thumbH + 'px';
-  thumbEl.style.transform = `translateY(${frac * (trackH - thumbH)}px)`;
-  bar.style.opacity = '1';
-  clearTimeout(scrollFadeT);
-  scrollFadeT = setTimeout(() => { if (bar) bar.style.opacity = '0'; }, 1800);
-}
-
-function initScrollBar() {
-  const bar = $('#scroll-bar');
-  if (!bar) return;
-  bar.addEventListener('pointerdown', e => {
-    e.stopPropagation();
-    const thumb = bar.firstElementChild;
-    const barRect   = bar.getBoundingClientRect();
-    const thumbRect = thumb.getBoundingClientRect();
-    const totalH    = document.body.scrollHeight;
-    const visH      = window.innerHeight;
-    const maxScroll = totalH - visH;
-    if (e.clientY >= thumbRect.top - 4 && e.clientY <= thumbRect.bottom + 4) {
-      // Drag the thumb
-      const startY = e.clientY, startSY = window.scrollY;
-      const trackH = bar.clientHeight, thumbH = thumb.clientHeight;
-      bar.setPointerCapture(e.pointerId);
-      function onDrag(me) {
-        const dy = me.clientY - startY;
-        window.scrollTo({ top: startSY + (dy / (trackH - thumbH)) * maxScroll, behavior: 'instant' });
-      }
-      function onDragEnd() {
-        window.removeEventListener('pointermove', onDrag);
-        window.removeEventListener('pointerup', onDragEnd);
-      }
-      window.addEventListener('pointermove', onDrag, { passive: true });
-      window.addEventListener('pointerup', onDragEnd, { once: true });
-    } else {
-      // Tap on track → jump
-      const frac = (e.clientY - barRect.top) / barRect.height;
-      window.scrollTo({ top: frac * maxScroll, behavior: 'smooth' });
-    }
-  });
-}
+/* ====================== 6g. Scrolling ======================
+   The detail page scrolls 100% natively (the browser's own momentum scroll,
+   exactly like WhatsApp / Telegram / iOS / Android lists). There is NO custom
+   scrollbar overlay: the previous one was a fixed strip on the right edge with
+   pointer-events:auto + touch-action:none, which intercepted touches near the
+   edge and drove scroll with jerky instant jumps. Removing it makes dragging a
+   finger anywhere on the list scroll smoothly and reach every item. */
 
 /* ====================== 6h. Toast ====================== */
 let toastT = null, toastFn = null;
@@ -1493,6 +1462,38 @@ $('#items').addEventListener('click', e => {
   if (text) beginEdit(text.dataset.edit);
 });
 
+/* ---- inline text formatting (bold / underline) ---- */
+function wrapSelection(input, marker) {
+  if (!input) return;
+  const v = input.value;
+  let s = input.selectionStart, e = input.selectionEnd;
+  if (s == null) { s = e = v.length; }
+  const sel = v.slice(s, e);
+  if (sel) {
+    input.value = v.slice(0, s) + marker + sel + marker + v.slice(e);
+    input.setSelectionRange(s + marker.length, e + marker.length);
+  } else {
+    input.value = v.slice(0, s) + marker + marker + v.slice(s);
+    const p = s + marker.length; input.setSelectionRange(p, p);
+  }
+}
+const fmtTarget = () => { const a = document.activeElement; return (a && (a.id === 'add-input' || a.classList.contains('item-edit'))) ? a : $('#add-input'); };
+// pointerdown + preventDefault keeps the text field focused and its selection intact
+document.addEventListener('pointerdown', e => {
+  const b = e.target.closest('[data-fmt]'); if (!b) return;
+  e.preventDefault();
+  const input = fmtTarget();
+  wrapSelection(input, b.dataset.fmt === 'bold' ? '**' : '__');
+  if (input && input.id === 'add-input') syncSend();
+  buzz(6);
+});
+// The formatting bar only appears while a text field is focused (add or edit)
+document.addEventListener('focusin', e => { if (e.target.matches('#add-input, .item-edit')) document.body.classList.add('fmt-on'); });
+document.addEventListener('focusout', e => {
+  if (!e.target.matches('#add-input, .item-edit')) return;
+  setTimeout(() => { const a = document.activeElement; if (!a || !a.matches('#add-input, .item-edit')) document.body.classList.remove('fmt-on'); }, 60);
+});
+
 /* Keep the add bar visible above the on-screen keyboard. The visualViewport
    shrinks when the keyboard opens; lift the bar by that amount so you can always
    see what you're typing. Works whether or not the WebView honours
@@ -1517,8 +1518,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { if (sheetOpen()) closeSheet(); else if (view.name === 'detail') navBack(); }
 });
 
-/* Scrollbar updates + drag-state safety cleanup */
-window.addEventListener('scroll', updateScrollBar, { passive: true });
+/* Drag-state safety cleanup (native scroll needs no JS) */
 document.addEventListener('visibilitychange', () => { if (document.hidden && drag) onDragEnd(); });
 
 /* ====================== 7. Init ====================== */
@@ -1549,7 +1549,6 @@ function init() {
   }
   refreshAccountUI();
   snapshotBadges();            // baseline so existing progress doesn't fire "unlocked" toasts on load
-  initScrollBar();
   showHome(false);
   syncSend();
   initAuth();                  // async; failures stay contained, app already usable

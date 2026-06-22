@@ -373,6 +373,8 @@ svg { display: block; }
   touch-action: pan-y;   /* vertical scroll always works; horizontal swipe handled in JS */
 }
 .item-text .tx { position: relative; }
+.item-text .tx strong { font-weight: 800; }
+.item-text .tx u { text-decoration-thickness: 2px; text-underline-offset: 2px; }
 .item-text .tx::after {
   content: ''; position: absolute; left: -1px; right: -1px; top: 52%;
   height: 2px; border-radius: 2px; background: var(--ink-3);
@@ -422,7 +424,7 @@ svg { display: block; }
 .detail-empty h3 { font-family: var(--font-display); font-size: 19px; font-weight: 700; margin-bottom: 6px; }
 .detail-empty p { color: var(--ink-2); font-size: 14px; max-width: 250px; margin: 0 auto; }
 
-.detail-bottom-space { height: calc(110px + env(safe-area-inset-bottom, 0px)); }
+.detail-bottom-space { height: calc(150px + env(safe-area-inset-bottom, 0px)); }   /* clears the fixed add bar so the last item is always fully tappable */
 
 /* ============================================================ item delete button */
 .item-del {
@@ -452,6 +454,22 @@ svg { display: block; }
 }
 #addbar { pointer-events: auto; }   /* the actual form still works */
 body.kb-open .addbar-wrap { padding-bottom: 10px; }   /* no home-indicator gap while keyboard is up */
+
+/* formatting toolbar (bold / underline) — appears just above the input while
+   you're typing a new item or editing one, like a keyboard accessory bar */
+.fmt-bar { display: none; align-items: center; gap: 8px; padding: 0 4px 8px; pointer-events: auto; }
+body.fmt-on .fmt-bar { display: flex; }
+.fmt-btn {
+  width: 40px; height: 34px; flex: 0 0 40px;
+  display: grid; place-items: center;
+  background: var(--surface); box-shadow: var(--shadow-1);
+  border-radius: 11px; color: var(--ink); font-size: 15px;
+  transition: transform .12s var(--ease-out), background .15s;
+}
+.fmt-btn b { font-weight: 800; }
+.fmt-btn u { text-underline-offset: 2px; }
+.fmt-btn:active { transform: scale(.9); background: var(--surface-2); }
+.fmt-hint { font-size: 11.5px; font-weight: 600; color: var(--ink-3); margin-left: 2px; }
 #addbar {
   display: flex; align-items: center; gap: 8px;
   background: var(--surface); border-radius: var(--r-pill);
@@ -484,29 +502,7 @@ body.kb-open .addbar-wrap { padding-bottom: 10px; }   /* no home-indicator gap w
 
 .voice-hint { text-align: center; font-size: 12.5px; font-weight: 600; color: var(--deep); padding: 0 0 8px; height: 20px; }
 
-/* ============================================================ right-edge scrollbar */
-#scroll-bar {
-  position: fixed;
-  right: 3px;
-  top: 60px;          /* below the sticky detail header */
-  bottom: 80px;       /* above the addbar */
-  width: 4px;
-  opacity: 0;
-  transition: opacity .3s;
-  z-index: 24;        /* just below the sheet/backdrop */
-  touch-action: none;
-  pointer-events: auto;
-  border-radius: 2px;
-}
-.scroll-thumb {
-  position: absolute;
-  left: 0; right: 0; top: 0;
-  min-height: 28px;
-  border-radius: 2px;
-  background: var(--ink-3);
-  opacity: .55;
-  transition: transform .08s linear;
-}
+/* The detail list uses native momentum scrolling — no custom scrollbar overlay. */
 
 /* ============================================================ sheets */
 #backdrop { position: fixed; inset: 0; background: rgba(8, 10, 14, .5); opacity: 0; transition: opacity .22s; z-index: 50; }

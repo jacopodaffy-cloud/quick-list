@@ -59,11 +59,13 @@
     <table id="user-table" style="display:none">
       <thead>
         <tr>
-          <th>Email / Nome</th>
+          <th>Nome / Email</th>
           <th>UID</th>
+          <th>Accesso</th>
           <th>Liste</th>
           <th>Elementi</th>
-          <th>Ultimo aggiornamento</th>
+          <th>Registrato</th>
+          <th>Ultimo accesso</th>
         </tr>
       </thead>
       <tbody id="user-tbody"></tbody>
@@ -126,37 +128,51 @@
 
   document.getElementById('refresh-btn').addEventListener('click', loadUsers);
 
+  const fmt = ms => Number.isFinite(ms) ? new Date(ms).toLocaleString('it-IT') : '—';
+
   async function loadUsers() {
     document.getElementById('loading').style.display = 'block';
     document.getElementById('user-table').style.display = 'none';
     try {
-      const snap = await fsMod.getDocs(fsMod.collection(db, 'users'));
-      const users = [];
-      snap.forEach(doc => users.push({ uid: doc.id, ...doc.data() }));
+      // profiles = registration database (identity), users = list data. Merge by uid.
+      const [profSnap, userSnap] = await Promise.all([
+        fsMod.getDocs(fsMod.collection(db, 'profiles')),
+        fsMod.getDocs(fsMod.collection(db, 'users')),
+      ]);
+
+      const byUid = {};
+      profSnap.forEach(d => { byUid[d.id] = { uid: d.id, ...d.data() }; });
+      userSnap.forEach(d => { byUid[d.id] = Object.assign({ uid: d.id }, byUid[d.id], { _data: d.data() }); });
+
+      const rows = Object.values(byUid).sort((a, b) =>
+        (b.lastLoginAt || (b._data && b._data.updatedAt) || 0) - (a.lastLoginAt || (a._data && a._data.updatedAt) || 0));
 
       let totalLists = 0, totalItems = 0;
       const tbody = document.getElementById('user-tbody');
       tbody.innerHTML = '';
 
-      users.forEach(u => {
-        const lists = u.lists || [];
+      rows.forEach(u => {
+        const data = u._data || {};
+        const lists = data.lists || [];
         const items = lists.reduce((acc, l) => acc + (l.items ? l.items.length : 0), 0);
         totalLists += lists.length;
         totalItems += items;
 
-        const updated = u.updatedAt ? new Date(u.updatedAt).toLocaleString('it-IT') : '—';
         const name = u.displayName || u.email || u.uid;
+        const last = u.lastLoginAt || data.updatedAt;
 
         tbody.innerHTML += `<tr>
-          <td>${esc(name)}</td>
-          <td style="font-family:monospace;font-size:0.75rem;color:#888">${esc(u.uid)}</td>
+          <td>${esc(name)}<div style="font-size:0.72rem;color:#888">${esc(u.email || '')}</div></td>
+          <td style="font-family:monospace;font-size:0.72rem;color:#888">${esc(u.uid)}</td>
+          <td><span class="badge">${esc(u.provider || '—')}</span></td>
           <td><span class="badge">${lists.length | 0}</span></td>
           <td><span class="badge">${items | 0}</span></td>
-          <td style="color:#888">${esc(updated)}</td>
+          <td style="color:#888">${esc(fmt(u.createdAt))}</td>
+          <td style="color:#888">${esc(fmt(last))}</td>
         </tr>`;
       });
 
-      document.getElementById('stat-users').textContent = users.length;
+      document.getElementById('stat-users').textContent = rows.length;
       document.getElementById('stat-lists').textContent = totalLists;
       document.getElementById('stat-items').textContent = totalItems;
       document.getElementById('loading').style.display = 'none';

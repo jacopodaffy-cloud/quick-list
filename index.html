@@ -72,6 +72,11 @@
 
     <div class="addbar-wrap">
       <p class="voice-hint" id="voice-hint"></p>
+      <div class="fmt-bar" role="toolbar" aria-label="Text formatting">
+        <button type="button" class="fmt-btn" data-fmt="bold" aria-label="Bold"><b>B</b></button>
+        <button type="button" class="fmt-btn" data-fmt="underline" aria-label="Underline"><u>U</u></button>
+        <span class="fmt-hint">Select text, then tap</span>
+      </div>
       <form id="addbar">
         <input id="add-input" placeholder="Add an item…  (paste a list, or “milk x2”)" enterkeyhint="done" autocomplete="off">
         <button type="button" class="mic-btn" id="mic" aria-label="Dictate by voice"></button>
@@ -84,7 +89,6 @@
   <div id="backdrop" hidden></div>
   <div id="sheet-root"></div>
   <div id="toast-root"></div>
-  <div id="scroll-bar"><div class="scroll-thumb"></div></div>
 </div>
 <script src="config.js?v=19"></script>
 <script src="app.js?v=19"></script>
