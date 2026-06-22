@@ -920,15 +920,28 @@ function previewItems(l, q) {
 }
 const hl = (text, q) => q ? esc(text).replace(new RegExp(`(${reEsc(q)})`, 'ig'), '<mark>$1</mark>') : esc(text);
 
-/* Inline text formatting for list items: **bold** and __underline__,
-   combinable as **__both__**. The text is ESCAPED first and the tags are
-   introduced only afterwards, so nothing the user types can inject HTML. */
+/* Inline text formatting for list items, stored as lightweight markers in the
+   plain-text value (so it persists & syncs unchanged, with no data migration).
+   EXTENSIBLE: add italic / strikethrough / etc. by adding one rule below and
+   (optionally) one toolbar button — fmtText() and stripFmt() pick it up
+   automatically. The text is ESCAPED first and tags are introduced only after,
+   so user input can never inject HTML (XSS-safe). Rules are applied outer→inner
+   so styles combine, e.g. **__both__** → <strong><u>both</u></strong>. */
+const FORMAT_RULES = [
+  { re: /\*\*([^*]+?)\*\*/g, tag: 'strong' },   // **bold**
+  { re: /__([^_]+?)__/g,     tag: 'u' },         // __underline__
+  // future, e.g.: { re: /~~([^~]+?)~~/g, tag: 's' }  // ~~strikethrough~~
+];
 function fmtText(s) {
-  return esc(s)
-    .replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/__([^_]+?)__/g, '<u>$1</u>');
+  let h = esc(s);
+  for (const r of FORMAT_RULES) h = h.replace(r.re, `<${r.tag}>$1</${r.tag}>`);
+  return h;
 }
-const stripFmt = s => String(s == null ? '' : s).replace(/\*\*([^*]+?)\*\*/g, '$1').replace(/__([^_]+?)__/g, '$1');
+function stripFmt(s) {
+  let t = String(s == null ? '' : s);
+  for (const r of FORMAT_RULES) t = t.replace(r.re, '$1');
+  return t;
+}
 
 function ListCard(l) {
   const done = l.items.filter(i => i.done).length, total = l.items.length;
@@ -1125,9 +1138,13 @@ function startDrag(row, startY, pointerId) {
   const container = $('#items');
   const rows = [...container.querySelectorAll('.item')];
   const rects = rows.map(r => r.getBoundingClientRect());
-  const h = rects[0].height;
-  const gap = rects.length > 1 ? rects[1].top - rects[0].bottom : 9;
-  drag = { row, rows, rects, container, h, gap, startY, index: rows.indexOf(row), current: rows.indexOf(row) };
+  const idx = rows.indexOf(row);
+  // Measure from the dragged row (always on-screen, so its size is real even
+  // with content-visibility windowing) and an adjacent row for the gap.
+  const h = (rects[idx] && rects[idx].height) || 56;
+  const gap = rects[idx + 1] ? rects[idx + 1].top - rects[idx].bottom
+            : rects[idx - 1] ? rects[idx].top - rects[idx - 1].bottom : 9;
+  drag = { row, rows, rects, container, h, gap, startY, index: idx, current: idx };
   row.classList.add('dragging');
   rows.forEach(r => { if (r !== row) r.classList.add('shift'); });
   container.style.touchAction = 'none';
@@ -1178,43 +1195,9 @@ function onDragEnd() {
   drag = null; noAnim = true; renderDetail();
 }
 
-/* ====================== 6d. Swipe to delete (or tap to edit) ====================== */
-let swipe = null;
-function startSwipe(e, wrap, itemId) {
-  swipe = { wrap, row: wrap.querySelector('.item'), itemId, x0: e.clientX, y0: e.clientY, dx: 0, mode: '' };
-  window.addEventListener('pointermove', onSwipeMove, { passive: true });
-  window.addEventListener('pointerup', onSwipeEnd);
-  window.addEventListener('pointercancel', onSwipeEnd);
-}
-function onSwipeMove(e) {
-  if (!swipe) return;
-  const dx = e.clientX - swipe.x0, dy = e.clientY - swipe.y0;
-  if (!swipe.mode) {
-    if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) { swipe.mode = 'swipe'; swipe.wrap.classList.add('swiping'); }
-    else if (Math.abs(dy) > 10) { cleanupSwipe(); return; }
-    else return;
-  }
-  if (swipe.mode !== 'swipe') return;
-  swipe.dx = Math.min(0, dx);
-  swipe.row.style.transition = 'none';
-  swipe.row.style.transform = `translateX(${swipe.dx}px)`;
-}
-function onSwipeEnd() {
-  if (!swipe) return;
-  const { row, wrap, itemId, dx, mode } = swipe;
-  cleanupSwipe();
-  if (mode === 'swipe') {
-    row.style.transition = ''; row.style.transform = '';
-    if (dx < -90) deleteItem(itemId);
-    else setTimeout(() => wrap.classList.remove('swiping'), 160); // let it slide back, then hide red
-  } else if (!mode) beginEdit(itemId); // tap, no movement
-}
-function cleanupSwipe() {
-  window.removeEventListener('pointermove', onSwipeMove);
-  window.removeEventListener('pointerup', onSwipeEnd);
-  window.removeEventListener('pointercancel', onSwipeEnd);
-  swipe = null;
-}
+/* Note: there is no horizontal swipe-to-delete. Deletion is an explicit trash
+   button on each row (clearer, and it never competes with vertical scrolling).
+   Tap-to-edit is wired via the #items click listener. */
 
 /* ====================== item mutations ====================== */
 function toggleItem(itemId) {

@@ -404,16 +404,17 @@ svg { display: block; }
 }
 .item-edit:focus { outline: 2px solid var(--c); }
 
-.item-wrap { position: relative; border-radius: var(--r-row); }
-.item-wrap .del-bg {
-  position: absolute; inset: 0;
-  background: #E5484D; border-radius: var(--r-row);
-  display: flex; align-items: center; justify-content: flex-end;
-  padding-right: 22px; color: #fff;
-  opacity: 0; transition: opacity .12s;   /* only shown mid-swipe — never peeks behind rows */
+.item-wrap {
+  position: relative;
+  border-radius: var(--r-row);
+  /* Browser-native windowing: rows scrolled off-screen skip layout & paint
+     entirely — the web's built-in equivalent of list virtualization. The
+     `auto 60px` hint reserves the right height so the scrollbar never jumps
+     and scroll position stays stable. Keeps lists with hundreds/thousands of
+     rows smooth with zero custom virtual-list code. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 60px;
 }
-.item-wrap.swiping .del-bg { opacity: 1; }
-.item-wrap .del-bg svg { width: 22px; height: 22px; }
 
 .detail-empty { text-align: center; padding: 54px 24px; animation: fade-up .35s var(--ease-out); }
 .detail-empty .ring {
