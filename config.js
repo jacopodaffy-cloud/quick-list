@@ -18,7 +18,7 @@
 window.QUICKLIST_CONFIG = {
   firebase: {
     apiKey: "AIzaSyCqpquRDztkMRJ3HHU-Uuxuh9-xU48pUmw",
-    authDomain: "qwicklist-d8ee6.firebaseapp.com",
+    authDomain: "qwicklist-v3.web.app",
     projectId: "qwicklist-d8ee6",
     storageBucket: "qwicklist-d8ee6.firebasestorage.app",
     messagingSenderId: "491197590751",
