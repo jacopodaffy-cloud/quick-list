@@ -799,8 +799,7 @@ function openAccountSheet() {
   openSheet(`
     <h2 class="sheet-title">${signup ? 'Create your account' : 'Welcome back'}</h2>
     <p class="sheet-sub">${CLOUD_ENABLED ? 'Save your lists and pick up where you left off on any device.' : 'Keep your lists behind a login on this device. Add cloud config for cross-device sync.'}</p>
-    <button class="btn-google" data-auth="google">${GOOGLE_G}<span>Continue with Google</span></button>
-    <div class="auth-or"><span>or</span></div>
+    ${!window.Capacitor ? `<button class="btn-google" data-auth="google">${GOOGLE_G}<span>Continue with Google</span></button><div class="auth-or"><span>or</span></div>` : ''}
     <form id="auth-form" class="auth-form" autocomplete="on">
       ${signup ? `<input class="field" name="username" placeholder="Username" autocomplete="username" required>` : ''}
       <input class="field" name="id" type="${signup ? 'email' : 'text'}" placeholder="${signup ? 'Email' : (CLOUD_ENABLED ? 'Email' : 'Email or username')}" autocomplete="${signup ? 'email' : 'username'}" ${signup && CLOUD_ENABLED ? 'required' : ''} ${signup ? 'inputmode="email"' : ''}>
