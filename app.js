@@ -17,6 +17,35 @@
      7. Init
    ============================================================ */
 
+/* ====================== 0. Version & Force Update ====================== */
+const APP_VERSION_CODE = 2;
+
+async function checkForceUpdate() {
+  try {
+    const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.minVersionCode && APP_VERSION_CODE < data.minVersionCode) {
+      showUpdateWall(data.playStoreUrl || 'https://play.google.com/store/apps/details?id=app.quicklist.twa');
+    }
+  } catch (e) { /* offline — don't block the user */ }
+}
+
+function showUpdateWall(url) {
+  const wall = document.createElement('div');
+  wall.id = 'update-wall';
+  wall.innerHTML = `
+    <div class="update-box">
+      <div class="update-logo">Quick<span>list</span></div>
+      <div class="update-icon">🚀</div>
+      <h2 class="update-title">Update available</h2>
+      <p class="update-msg">A new version of QuickList is required to continue. Update now to keep your lists in sync.</p>
+      <a class="btn update-btn" href="${url}" target="_blank" rel="noopener">Update on Play Store</a>
+    </div>
+  `;
+  document.body.appendChild(wall);
+}
+
 /* ====================== 1. Utils ====================== */
 const $ = s => document.querySelector(s);
 const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
@@ -1820,5 +1849,6 @@ function init() {
   initAuth();                  // async; failures stay contained, app already usable
 
   try { if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js'); } catch (e) { }
+  checkForceUpdate();
 }
 try { init(); } catch (err) { showFatal(err); }

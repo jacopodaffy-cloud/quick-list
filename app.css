@@ -812,3 +812,38 @@ body.view-home #scrollbar {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* ============================================================ force update wall */
+#update-wall {
+  position: fixed; inset: 0; z-index: 9999;
+  background: var(--canvas);
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--pad);
+  animation: fade-up .34s var(--ease-out);
+}
+.update-box {
+  max-width: 360px; width: 100%;
+  background: var(--surface);
+  border-radius: 28px;
+  padding: 36px 28px;
+  box-shadow: var(--shadow-2);
+  text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.update-logo {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 800; letter-spacing: -.03em; color: var(--ink);
+}
+.update-logo span { color: var(--ink-2); }
+.update-icon { font-size: 52px; line-height: 1; margin: 8px 0; }
+.update-title {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 700; letter-spacing: -.02em; color: var(--ink);
+}
+.update-msg { font-size: 14px; color: var(--ink-2); line-height: 1.5; max-width: 280px; }
+.update-btn {
+  margin-top: 10px; width: 100%; padding: 15px;
+  background: #5A63E0; color: #fff;
+  text-decoration: none; border-radius: var(--r-pill);
+  font-weight: 600; font-size: 16px;
+}
