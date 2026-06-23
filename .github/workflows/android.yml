@@ -60,12 +60,6 @@ jobs:
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | python3 -c "import sys,base64; open('android/app/quicklist-release.keystore','wb').write(base64.b64decode(sys.stdin.read().strip()))"
 
-      - name: Print SHA-1 fingerprint (copy this into Firebase)
-        run: |
-          echo "======= FIREBASE FINGERPRINTS START ======="
-          keytool -list -v -keystore android/app/quicklist-release.keystore -alias ${{ secrets.KEY_ALIAS }} -storepass ${{ secrets.KEYSTORE_PASSWORD }}
-          echo "======= FIREBASE FINGERPRINTS END ======="
-
       - name: Build release AAB (Play Store)
         run: |
           cd android
