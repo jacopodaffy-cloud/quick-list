@@ -123,7 +123,18 @@ svg { display: block; }
   min-height: 100dvh;
   padding: calc(env(safe-area-inset-top, 0px) + 18px) var(--pad) 0;
 }
-#page-home { animation: fade-up .34s var(--ease-out); }
+/* Home is its own dedicated scroll container too (same reliable pattern as the
+   detail page) — so the list of lists always scrolls natively on every device. */
+#page-home {
+  animation: fade-up .34s var(--ease-out);
+  height: 100dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+#page-home::-webkit-scrollbar { width: 0; height: 0; display: none; }
 #page-detail { animation: slide-in .3s var(--ease-out); }
 @keyframes fade-up { from { transform: translateY(8px); } }
 @keyframes slide-in { from { transform: translateX(6%); } }
@@ -550,14 +561,19 @@ body.fmt-on .fmt-bar { display: flex; }
 #scrollbar {
   position: fixed;
   right: max(2px, calc(50vw - var(--shell) / 2 + 2px));
-  top: calc(env(safe-area-inset-top, 0px) + 74px);   /* below the sticky header */
-  bottom: calc(104px + env(safe-area-inset-bottom, 0px));   /* above the add bar */
+  top: calc(env(safe-area-inset-top, 0px) + 74px);   /* below the sticky header (detail) */
+  bottom: calc(104px + env(safe-area-inset-bottom, 0px));   /* above the add bar (detail) */
   width: 16px;            /* invisible touch zone — easy to grab */
   z-index: 26;
   display: none;
   touch-action: none;
 }
-body.view-detail #scrollbar { display: block; }
+/* Show on both screens; home has no sticky header / add bar, so a taller track. */
+body.view-detail #scrollbar, body.view-home #scrollbar { display: block; }
+body.view-home #scrollbar {
+  top: calc(env(safe-area-inset-top, 0px) + 24px);
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));   /* above the FAB */
+}
 #scrollthumb {
   position: absolute;
   right: 3px; top: 0;

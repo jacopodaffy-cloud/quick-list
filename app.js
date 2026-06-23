@@ -1041,10 +1041,12 @@ window.addEventListener('popstate', e => {
 function showHome(push = false) {
   view.name = 'home'; view.id = null;
   document.body.classList.remove('fmt-on', 'view-detail');
+  document.body.classList.add('view-home');
   $('#page-detail').hidden = true;
   const h = $('#page-home'); h.hidden = false;
   h.style.animation = 'none'; void h.offsetWidth; h.style.animation = '';
-  renderHome(); window.scrollTo(0, 0);
+  renderHome();
+  requestAnimationFrame(() => { h.scrollTop = 0; updateScrollbar(); });
   if (push) pushNav({ v: 'home' });
 }
 function showDetail(id, push = true) {
@@ -1054,7 +1056,7 @@ function showDetail(id, push = true) {
   const d = $('#page-detail'); d.hidden = false;
   d.style.animation = 'none'; void d.offsetWidth; d.style.animation = '';
   $('#add-input').value = ''; syncSend();
-  document.body.classList.remove('fmt-on');
+  document.body.classList.remove('fmt-on', 'view-home');
   document.body.classList.add('view-detail');
   renderDetail();
   requestAnimationFrame(() => { d.scrollTop = 0; updateScrollbar(); });
@@ -1145,6 +1147,7 @@ function ItemRow(it) {
 
 /* ---- Home view ---- */
 function renderHome() {
+  requestAnimationFrame(updateScrollbar);   // refresh the scrollbar thumb after the grid re-renders
   const total = state.lists.length;
   const ls = homeView();
   const filtering = !!(homeQuery.trim() || state.filterColor);
@@ -1571,10 +1574,11 @@ async function copyCode(id) {
    grabbable thumb on the right edge — it reflects the scroll position and can be
    dragged or tapped to move through long lists. It never blocks normal scrolling
    (it's a narrow overlay; the rest of the page scrolls natively as usual). */
-const detailScroller = () => $('#page-detail');
+/* The active scroll container: the detail list OR the home list-of-lists.
+   Both are dedicated scroll containers, so the scrollbar works on either. */
+const activeScroller = () => view.name === 'detail' ? $('#page-detail') : $('#page-home');
 function updateScrollbar() {
-  if (view.name !== 'detail') return;
-  const sc = detailScroller(), bar = $('#scrollbar'), thumb = $('#scrollthumb');
+  const sc = activeScroller(), bar = $('#scrollbar'), thumb = $('#scrollthumb');
   if (!sc || !bar || !thumb) return;
   const ch = sc.clientHeight, sh = sc.scrollHeight, st = sc.scrollTop;
   const trackH = bar.clientHeight;
@@ -1589,12 +1593,13 @@ function updateScrollbar() {
 let sbRaf = 0;
 function onDetailScroll() { if (sbRaf) return; sbRaf = requestAnimationFrame(() => { sbRaf = 0; updateScrollbar(); }); }
 function initScrollbar() {
-  const bar = $('#scrollbar'), sc0 = detailScroller();
-  if (!bar || !sc0) return;
-  sc0.addEventListener('scroll', onDetailScroll, { passive: true });
+  const bar = $('#scrollbar');
+  if (!bar) return;
+  // Listen to both scroll containers (home + detail); only the active one is visible.
+  ['#page-home', '#page-detail'].forEach(sel => { const el = $(sel); if (el) el.addEventListener('scroll', onDetailScroll, { passive: true }); });
   window.addEventListener('resize', () => updateScrollbar(), { passive: true });
   bar.addEventListener('pointerdown', e => {
-    const sc = detailScroller(); if (!sc) return;
+    const sc = activeScroller(); if (!sc) return;
     const thumb = $('#scrollthumb');
     const barRect = bar.getBoundingClientRect();
     const thumbRect = thumb.getBoundingClientRect();
