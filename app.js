@@ -1182,7 +1182,7 @@ function ListCard(l) {
 function ItemRow(it) {
   return `<div class="item-wrap">
     <div class="item ${it.done ? 'done' : ''}" data-id="${it.id}">
-      <span class="handle" data-handle aria-label="Double-tap, then drag to reorder">${I.grip}</span>
+      <span class="handle" data-handle aria-label="Hold to drag and reorder">${I.grip}</span>
       <button class="check" data-check="${it.id}" role="checkbox" aria-checked="${it.done}" aria-label="${esc(stripFmt(it.text))}">${I.tick}</button>
       <span class="item-text ${it.text ? '' : (it.img ? 'photo-only' : '')}" data-edit="${it.id}"><span class="tx">${fmtText(it.text)}</span></span>
       ${it.img ? `<button class="item-img" data-img="${it.id}" aria-label="View photo"><img src="${it.img}" alt="" loading="lazy"></button>` : ''}
@@ -1407,27 +1407,33 @@ function toggleVoice() {
   try { rec.start(); } catch (e) { }
 }
 
-/* ====================== 6c. Drag to reorder (double-tap the grip) ======================
-   A single touch/swipe on the grip scrolls the list normally (pan-y) — nothing
-   is intercepted, so scrolling is NEVER affected. A DOUBLE-TAP on the grip grabs
-   that row: keep your finger down on the second tap and drag up/down to move it,
-   release to drop. (Works with mouse double-click + drag on desktop too.) */
+/* ====================== 6c. Drag to reorder (hold the grip) ======================
+   A short swipe on the grip scrolls the list normally (pan-y) — nothing
+   is intercepted, so scrolling is NEVER affected. HOLD the grip for 300 ms to
+   grab that row, then drag up/down to reorder and release to drop. */
 let drag = null;
-let lastGripTap = 0, lastGripX = 0, lastGripY = 0;
+let gripTimer = null, gripData = null;
 function onPointerDown(e) {
   const handle = e.target.closest('[data-handle]');
   if (!handle) return;                       // anywhere else → 100% native scroll
   const row = handle.closest('.item'); if (!row) return;
-  const now = Date.now();
-  const near = Math.abs(e.clientX - lastGripX) < 32 && Math.abs(e.clientY - lastGripY) < 32;
-  if (now - lastGripTap < 340 && near) {
-    lastGripTap = 0;
-    try { e.preventDefault(); } catch (_) { }   // this gesture is a drag, not a scroll
-    startDrag(row, e.clientY, e.pointerId);
-    return;
+  gripData = { id: e.pointerId, y: e.clientY, x: e.clientX, row };
+  gripTimer = setTimeout(() => {
+    if (!gripData) return;
+    const d = gripData; gripData = null; gripTimer = null;
+    startDrag(d.row, d.y, d.id);
+  }, 300);
+}
+function onGripPointerMove(e) {
+  if (!gripData) return;
+  // Cancel if the finger moved — user is scrolling, not holding
+  if (Math.abs(e.clientY - gripData.y) > 8 || Math.abs(e.clientX - gripData.x) > 8) {
+    clearTimeout(gripTimer); gripTimer = null; gripData = null;
   }
-  // First tap: just record it. A plain swipe on the grip still scrolls (pan-y).
-  lastGripTap = now; lastGripX = e.clientX; lastGripY = e.clientY;
+}
+function onGripPointerUp() {
+  if (gripTimer) { clearTimeout(gripTimer); gripTimer = null; }
+  gripData = null;
 }
 function startDrag(row, startY, pointerId) {
   if (!row) return;
@@ -1855,6 +1861,9 @@ $('#img-btn').addEventListener('click', () => pickImageFor('new'));
 $('#img-input').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) onImagePicked(f); });
 
 $('#items').addEventListener('pointerdown', onPointerDown);
+$('#items').addEventListener('pointermove', onGripPointerMove, { passive: true });
+$('#items').addEventListener('pointerup', onGripPointerUp);
+$('#items').addEventListener('pointercancel', onGripPointerUp);
 // Tap item text to edit — click never fires during scroll, so this never conflicts
 $('#items').addEventListener('click', e => {
   if (drag) return;
