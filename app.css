@@ -236,6 +236,14 @@ svg { display: block; }
   box-shadow: var(--shadow-1);
 }
 .pin-flag svg { width: 12px; height: 12px; }
+.share-flag {
+  position: absolute; bottom: -7px; right: -7px;
+  width: 19px; height: 19px; border-radius: 50%;
+  background: var(--surface); color: var(--deep);
+  display: grid; place-items: center;
+  box-shadow: var(--shadow-1);
+}
+.share-flag svg { width: 12px; height: 12px; }
 .card-menu {
   width: 32px; height: 32px; margin: -4px -4px 0 0;
   display: grid; place-items: center; border-radius: 9px;
@@ -281,10 +289,14 @@ svg { display: block; }
 .empty .glyph { font-size: 40px; margin-bottom: 14px; }
 
 /* ============================================================ FAB */
-#fab {
+.fab-wrap {
   position: fixed;
   right: max(20px, calc(50vw - var(--shell) / 2 + 20px));
   bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; gap: 12px;
+  z-index: 30;
+}
+#fab {
   height: 58px; padding: 0 22px 0 18px;
   display: flex; align-items: center; gap: 9px;
   border-radius: var(--r-pill);
@@ -292,10 +304,32 @@ svg { display: block; }
   font-weight: 600; font-size: 15.5px; letter-spacing: -.01em;
   box-shadow: var(--shadow-2);
   transition: transform .15s var(--ease-spring);
-  z-index: 30;
 }
 #fab:active { transform: scale(.92); }
 #fab svg { width: 22px; height: 22px; }
+/* secondary mini-FAB: join a shared list by code */
+#join-fab {
+  width: 52px; height: 52px; flex: 0 0 52px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--surface); color: var(--ink);
+  box-shadow: var(--shadow-2);
+  transition: transform .15s var(--ease-spring);
+}
+#join-fab:active { transform: scale(.9); }
+#join-fab svg { width: 23px; height: 23px; }
+
+/* shared-list code display + input */
+.share-code {
+  font-family: var(--font-display);
+  font-size: 36px; font-weight: 800; letter-spacing: .16em;
+  text-align: center; color: var(--ink);
+  background: var(--surface-2); border-radius: 16px;
+  padding: 20px 12px; margin: 6px 0 16px;
+  user-select: all; -webkit-user-select: all;
+}
+.code-input { text-transform: uppercase; letter-spacing: .2em; font-weight: 800; text-align: center; font-size: 21px; }
+.code-input::placeholder { letter-spacing: .2em; font-weight: 700; }
 
 /* ============================================================ detail */
 /* The detail page is its own dedicated scroll container (height + overflow),
@@ -714,6 +748,10 @@ body.view-detail #scrollbar { display: block; }
 .toggle:active::after { width: 28px; }
 
 /* ============================================================ badges */
+.badge-cat { margin-bottom: 18px; }
+.badge-cat-head { display: flex; align-items: baseline; justify-content: space-between; margin: 2px 2px 9px; }
+.badge-cat-head > span:first-child { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+.badge-cat-count { font-size: 12px; font-weight: 800; color: var(--c); }
 .badge-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 11px; margin: 4px 0 2px; }
 @media (min-width: 600px) { .badge-grid { grid-template-columns: repeat(3, 1fr); } }
 .badge-card {

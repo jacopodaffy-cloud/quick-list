@@ -91,6 +91,8 @@ const I = {
   moon: ic('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>'),
   monitor: ic('<rect x="3" y="4" width="18" height="13" rx="2.5"/><path d="M8 21h8M12 17v4"/>'),
   check: ic('<path d="m20 6-11 11-5-5"/>'),
+  users: ic('<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 5.2a3.2 3.2 0 0 1 0 6.1"/><path d="M21.5 20a6.5 6.5 0 0 0-4.5-6.2"/>'),
+  link: ic('<path d="M9 15l6-6"/><path d="M11 6.5l1.2-1.2a3.5 3.5 0 0 1 5 5L16 11.5"/><path d="M13 17.5l-1.2 1.2a3.5 3.5 0 0 1-5-5L8 12.5"/>'),
 };
 const GOOGLE_G = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M22.5 12.2c0-.68-.06-1.36-.18-2.02H12v3.83h5.9a5.05 5.05 0 0 1-2.19 3.31v2.74h3.54c2.07-1.91 3.25-4.72 3.25-7.86z"/><path fill="#34A853" d="M12 23c2.94 0 5.42-.97 7.23-2.64l-3.54-2.74c-.98.66-2.24 1.05-3.69 1.05-2.84 0-5.25-1.92-6.11-4.5H2.23v2.83A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.89 14.17a6.6 6.6 0 0 1 0-4.34V7H2.23a11 11 0 0 0 0 9.99l3.66-2.82z"/><path fill="#EA4335" d="M12 4.75c1.6 0 3.04.55 4.18 1.62l3.13-3.13C17.42 1.46 14.94.5 12 .5A11 11 0 0 0 2.23 7l3.66 2.83C6.75 6.67 9.16 4.75 12 4.75z"/></svg>';
 
@@ -177,6 +179,8 @@ function normalize(s) {
         color: validColor(l.color),
         pinned: !!l.pinned,
         tidy: !!l.tidy,
+        code: (typeof l.code === 'string' && /^[A-Z0-9]{4,10}$/.test(l.code)) ? l.code : null,
+        shared: !!(l.shared && typeof l.code === 'string' && /^[A-Z0-9]{4,10}$/.test(l.code)),
         createdAt: Number.isFinite(l.createdAt) ? l.createdAt : Date.now(),
         updatedAt: Number.isFinite(l.updatedAt) ? l.updatedAt : Date.now(),
         items: l.items.slice(0, MAX.items)
@@ -203,7 +207,8 @@ function load() {
 function save() {
   state.updatedAt = Date.now();
   writeData(activeKey(), state);
-  schedulePush();                          // cloud push (no-op unless signed into cloud)
+  schedulePush();                          // account cloud push (no-op unless signed into cloud)
+  for (const l of state.lists) if (l.shared && l.code) schedulePushShared(l);   // collaborative lists
 }
 
 const mkItem = (text, done = false, qty = null) => ({ id: uid(), text: cleanText(text, MAX.item), done: !!done, qty: qty && qty > 1 ? Math.min(999, Math.floor(qty)) : null });
@@ -271,18 +276,76 @@ function bumpStat(key, by = 1) {
 }
 const distinctColors = () => new Set((state.lists || []).map(l => l.color)).size;
 const listIsComplete = l => l.items.length > 0 && l.items.every(i => i.done);
+const listCount = () => (state.lists || []).length;
+const sharedCount = () => (state.lists || []).filter(l => l.shared).length;
+const maxListSize = () => (state.lists || []).reduce((m, l) => Math.max(m, (l.items || []).length), 0);
 
+/* 50 badges across 7 categories. All values are derived (no extra source of
+   truth) — `val` reads stats / live lists / level. `cat` groups them in the UI. */
+const BADGE_CATS = [
+  { id: 'create', label: 'Creating' }, { id: 'finish', label: 'Completing' },
+  { id: 'check', label: 'Checking off' }, { id: 'colour', label: 'Colours' },
+  { id: 'collab', label: 'Collaboration' }, { id: 'level', label: 'Levels' },
+  { id: 'collect', label: 'Collecting' },
+];
 const BADGES = [
-  { id: 'starter',   icon: '🌱', name: 'First List',     desc: 'Create your first list',     goal: 1,   val: s => s.created },
-  { id: 'builder',   icon: '🧱', name: 'Builder',        desc: 'Create 10 lists',            goal: 10,  val: s => s.created },
-  { id: 'architect', icon: '🏗️', name: 'Architect',      desc: 'Create 50 lists',            goal: 50,  val: s => s.created },
-  { id: 'closer',    icon: '✅', name: 'Closer',         desc: 'Complete a whole list',      goal: 1,   val: s => s.completed },
-  { id: 'roll',      icon: '🔥', name: 'On a Roll',      desc: 'Complete 5 lists',           goal: 5,   val: s => s.completed },
-  { id: 'champion',  icon: '🏆', name: 'Champion',       desc: 'Complete 25 lists',          goal: 25,  val: s => s.completed },
-  { id: 'legend',    icon: '👑', name: 'Legend',         desc: 'Complete 100 lists',         goal: 100, val: s => s.completed },
-  { id: 'ticker',    icon: '☑️', name: 'Ticker',         desc: 'Check off 50 items',         goal: 50,  val: s => s.checked },
-  { id: 'centurion', icon: '💯', name: 'Centurion',      desc: 'Check off 250 items',        goal: 250, val: s => s.checked },
-  { id: 'rainbow',   icon: '🌈', name: 'Full Spectrum',  desc: 'Use all 10 colours',         goal: 10,  val: () => distinctColors() },
+  // — Creating (lists created) —
+  { id: 'cr1',  cat: 'create', icon: '🌱', name: 'First List',    desc: 'Create your first list', goal: 1,   val: s => s.created },
+  { id: 'cr3',  cat: 'create', icon: '✏️', name: 'Getting Started',desc: 'Create 3 lists',        goal: 3,   val: s => s.created },
+  { id: 'cr5',  cat: 'create', icon: '🗂️', name: 'Organiser',     desc: 'Create 5 lists',         goal: 5,   val: s => s.created },
+  { id: 'cr10', cat: 'create', icon: '🧱', name: 'Builder',       desc: 'Create 10 lists',        goal: 10,  val: s => s.created },
+  { id: 'cr15', cat: 'create', icon: '📚', name: 'Collector',     desc: 'Create 15 lists',        goal: 15,  val: s => s.created },
+  { id: 'cr25', cat: 'create', icon: '🏗️', name: 'Architect',     desc: 'Create 25 lists',        goal: 25,  val: s => s.created },
+  { id: 'cr40', cat: 'create', icon: '🏙️', name: 'Developer',     desc: 'Create 40 lists',        goal: 40,  val: s => s.created },
+  { id: 'cr60', cat: 'create', icon: '🏛️', name: 'Master Planner',desc: 'Create 60 lists',        goal: 60,  val: s => s.created },
+  { id: 'cr80', cat: 'create', icon: '🌆', name: 'Visionary',     desc: 'Create 80 lists',        goal: 80,  val: s => s.created },
+  { id: 'cr120',cat: 'create', icon: '🌍', name: 'List Tycoon',   desc: 'Create 120 lists',       goal: 120, val: s => s.created },
+  // — Completing (lists finished) —
+  { id: 'fi1',  cat: 'finish', icon: '✅', name: 'Closer',        desc: 'Complete your first list', goal: 1,  val: s => s.completed },
+  { id: 'fi3',  cat: 'finish', icon: '👍', name: 'Finisher',      desc: 'Complete 3 lists',       goal: 3,   val: s => s.completed },
+  { id: 'fi5',  cat: 'finish', icon: '🔥', name: 'On a Roll',     desc: 'Complete 5 lists',       goal: 5,   val: s => s.completed },
+  { id: 'fi10', cat: 'finish', icon: '⚡', name: 'Achiever',      desc: 'Complete 10 lists',      goal: 10,  val: s => s.completed },
+  { id: 'fi20', cat: 'finish', icon: '🎯', name: 'Sharpshooter',  desc: 'Complete 20 lists',      goal: 20,  val: s => s.completed },
+  { id: 'fi30', cat: 'finish', icon: '🏅', name: 'Champion',      desc: 'Complete 30 lists',      goal: 30,  val: s => s.completed },
+  { id: 'fi50', cat: 'finish', icon: '🏆', name: 'Conqueror',     desc: 'Complete 50 lists',      goal: 50,  val: s => s.completed },
+  { id: 'fi75', cat: 'finish', icon: '💪', name: 'Unstoppable',   desc: 'Complete 75 lists',      goal: 75,  val: s => s.completed },
+  { id: 'fi100',cat: 'finish', icon: '👑', name: 'Legend',        desc: 'Complete 100 lists',     goal: 100, val: s => s.completed },
+  { id: 'fi150',cat: 'finish', icon: '🦄', name: 'Mythic',        desc: 'Complete 150 lists',     goal: 150, val: s => s.completed },
+  // — Checking off (items ticked) —
+  { id: 'ch10', cat: 'check', icon: '☑️', name: 'Ticker',         desc: 'Check off 10 items',     goal: 10,  val: s => s.checked },
+  { id: 'ch25', cat: 'check', icon: '✔️', name: 'Tidy',           desc: 'Check off 25 items',     goal: 25,  val: s => s.checked },
+  { id: 'ch50', cat: 'check', icon: '🧹', name: 'Sweeper',        desc: 'Check off 50 items',     goal: 50,  val: s => s.checked },
+  { id: 'ch100',cat: 'check', icon: '💯', name: 'Centurion',      desc: 'Check off 100 items',    goal: 100, val: s => s.checked },
+  { id: 'ch200',cat: 'check', icon: '🚀', name: 'Productive',     desc: 'Check off 200 items',    goal: 200, val: s => s.checked },
+  { id: 'ch300',cat: 'check', icon: '⭐', name: 'Star Checker',   desc: 'Check off 300 items',    goal: 300, val: s => s.checked },
+  { id: 'ch500',cat: 'check', icon: '🌟', name: 'Power User',     desc: 'Check off 500 items',    goal: 500, val: s => s.checked },
+  { id: 'ch750',cat: 'check', icon: '🔋', name: 'Machine',        desc: 'Check off 750 items',    goal: 750, val: s => s.checked },
+  { id: 'ch1k', cat: 'check', icon: '🧠', name: 'Mastermind',     desc: 'Check off 1000 items',   goal: 1000,val: s => s.checked },
+  { id: 'ch2k', cat: 'check', icon: '🛸', name: 'Legendary Doer', desc: 'Check off 2000 items',   goal: 2000,val: s => s.checked },
+  // — Colours —
+  { id: 'co2',  cat: 'colour', icon: '🎨', name: 'Two-Tone',      desc: 'Use 2 different colours',goal: 2,   val: () => distinctColors() },
+  { id: 'co3',  cat: 'colour', icon: '🖌️', name: 'Colourful',     desc: 'Use 3 colours',          goal: 3,   val: () => distinctColors() },
+  { id: 'co5',  cat: 'colour', icon: '🌸', name: 'Palette',       desc: 'Use 5 colours',          goal: 5,   val: () => distinctColors() },
+  { id: 'co7',  cat: 'colour', icon: '🌷', name: 'Vivid',         desc: 'Use 7 colours',          goal: 7,   val: () => distinctColors() },
+  { id: 'co10', cat: 'colour', icon: '🌈', name: 'Full Spectrum', desc: 'Use all 10 colours',     goal: 10,  val: () => distinctColors() },
+  // — Collaboration (shared lists) —
+  { id: 'cl1',  cat: 'collab', icon: '🔗', name: 'Sharer',        desc: 'Share a list with a code',goal: 1,  val: () => sharedCount() },
+  { id: 'cl2',  cat: 'collab', icon: '🤝', name: 'Team Player',   desc: 'Have 2 shared lists',    goal: 2,   val: () => sharedCount() },
+  { id: 'cl5',  cat: 'collab', icon: '👥', name: 'Collaborator',  desc: 'Have 5 shared lists',    goal: 5,   val: () => sharedCount() },
+  // — Levels (points) —
+  { id: 'lv2',  cat: 'level', icon: '🥉', name: 'Level 2',        desc: 'Reach level 2',          goal: 2,   val: () => levelOf() },
+  { id: 'lv3',  cat: 'level', icon: '🥈', name: 'Level 3',        desc: 'Reach level 3',          goal: 3,   val: () => levelOf() },
+  { id: 'lv5',  cat: 'level', icon: '🥇', name: 'Level 5',        desc: 'Reach level 5',          goal: 5,   val: () => levelOf() },
+  { id: 'lv8',  cat: 'level', icon: '🎖️', name: 'Level 8',        desc: 'Reach level 8',          goal: 8,   val: () => levelOf() },
+  { id: 'lv12', cat: 'level', icon: '🏵️', name: 'Level 12',       desc: 'Reach level 12',         goal: 12,  val: () => levelOf() },
+  { id: 'lv16', cat: 'level', icon: '💠', name: 'Level 16',       desc: 'Reach level 16',         goal: 16,  val: () => levelOf() },
+  { id: 'lv20', cat: 'level', icon: '🔱', name: 'Level 20',       desc: 'Reach level 20',         goal: 20,  val: () => levelOf() },
+  // — Collecting (lists at once / big lists) —
+  { id: 'ct5',  cat: 'collect', icon: '📦', name: 'Stocked',      desc: 'Have 5 lists at once',   goal: 5,   val: () => listCount() },
+  { id: 'ct10', cat: 'collect', icon: '🗄️', name: 'Library',      desc: 'Have 10 lists at once',  goal: 10,  val: () => listCount() },
+  { id: 'ct25', cat: 'collect', icon: '🏪', name: 'Warehouse',    desc: 'Have 25 lists at once',  goal: 25,  val: () => listCount() },
+  { id: 'bg20', cat: 'collect', icon: '📜', name: 'Long List',    desc: 'A list with 20+ items',  goal: 20,  val: () => maxListSize() },
+  { id: 'bg50', cat: 'collect', icon: '📃', name: 'Epic List',    desc: 'A list with 50+ items',  goal: 50,  val: () => maxListSize() },
 ];
 const badgeValue = b => Math.min(b.val(statsOf()), b.goal);
 const badgeEarned = b => b.val(statsOf()) >= b.goal;
@@ -390,6 +453,97 @@ async function cloudPush() {
   if (!session || session.provider !== 'cloud') return;
   try { const c = await ensureCloud(); await c.fs.setDoc(c.fs.doc(c.db, 'users', session.uid), JSON.parse(JSON.stringify(state))); }
   catch (e) { /* offline — kept in local cache, retried on next change */ }
+}
+
+/* ====================== 3d. Collaborative lists (share by code) ======================
+   Anyone can share a list (gets a random code); others join with that code — NO
+   account needed. Each shared list is mirrored to Firestore at shared/{code} and
+   synced live both ways (last-write-wins at list level). Access uses Firebase
+   ANONYMOUS auth so the rules can still require a token. One-time Firebase setup:
+   enable Anonymous sign-in, and add the rule:
+     match /shared/{code} { allow read, write: if request.auth != null; }
+   (see SETUP-ACCOUNTS.md). Degrades gracefully with a clear message if absent. */
+const sharedUnsubs = {};        // code -> firestore unsubscribe
+const sharedPushTimers = {};    // code -> debounce timer
+const SHARE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no ambiguous 0/O/1/I/L
+function genCode(n = 6) { let s = ''; const a = crypto.getRandomValues(new Uint8Array(n)); for (let i = 0; i < n; i++) s += SHARE_ALPHABET[a[i] % SHARE_ALPHABET.length]; return s; }
+const cleanCode = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+
+/* Ensure a Firebase auth token (the account, or an invisible anonymous one) so
+   shared docs are reachable. The anon user is NEVER promoted to an account
+   session (see the isAnonymous guard in initAuth). */
+async function ensureAuthToken() {
+  const c = await ensureCloud();
+  if (!c.auth.currentUser) await c.authm.signInAnonymously(c.auth);
+  return c;
+}
+const normRemoteList = rl => { const s = normalize({ lists: [rl] }); return s && s.lists[0]; };
+const sharePayload = l => ({ code: l.code, title: l.title || '', color: l.color, items: JSON.parse(JSON.stringify(l.items || [])), updatedAt: l.updatedAt || Date.now() });
+
+async function pushSharedNow(l) {
+  if (!CLOUD_ENABLED || !l || !l.shared || !l.code) return;
+  try { const c = await ensureAuthToken(); await c.fs.setDoc(c.fs.doc(c.db, 'shared', l.code), sharePayload(l)); }
+  catch (e) { /* offline / not set up — retried on next change */ }
+}
+function schedulePushShared(l) {
+  if (!CLOUD_ENABLED || !l || !l.shared || !l.code) return;
+  clearTimeout(sharedPushTimers[l.code]);
+  sharedPushTimers[l.code] = setTimeout(() => pushSharedNow(l), 900);
+}
+function subscribeShared(l) {
+  if (!CLOUD_ENABLED || !l || !l.code || sharedUnsubs[l.code]) return;
+  const code = l.code, localId = l.id;
+  ensureAuthToken().then(c => {
+    if (sharedUnsubs[code]) return;
+    sharedUnsubs[code] = c.fs.onSnapshot(c.fs.doc(c.db, 'shared', code), snap => {
+      if (!snap.exists() || snap.metadata.hasPendingWrites) return;   // ignore our own optimistic writes
+      const remote = snap.data(); const rl = remote && normRemoteList(remote);
+      if (!rl) return;
+      const local = state.lists.find(x => x.id === localId || x.code === code);
+      if (!local) return;
+      if ((remote.updatedAt || 0) <= (local.updatedAt || 0)) return;  // ours is newer/equal
+      local.title = rl.title; local.color = rl.color; local.items = rl.items; local.updatedAt = remote.updatedAt;
+      writeData(activeKey(), state);   // persist WITHOUT re-pushing
+      if (view.name === 'detail' && view.id === local.id) { if (!editingNow()) { noAnim = true; renderDetail(); } }
+      else if (view.name === 'home') renderHome();
+    }, () => { });
+  }).catch(() => { });
+}
+function unsubscribeShared(code) { if (sharedUnsubs[code]) { try { sharedUnsubs[code](); } catch (e) { } delete sharedUnsubs[code]; } }
+function resubscribeAllShared() { if (!CLOUD_ENABLED) return; for (const l of (state.lists || [])) if (l.shared && l.code) subscribeShared(l); }
+
+async function createShare(id) {
+  const l = getList(id); if (!l) return;
+  if (l.shared && l.code) return openShareSheet(l);
+  if (!CLOUD_ENABLED) { toast('Cloud sharing is not set up yet'); return; }
+  try {
+    await ensureAuthToken();
+    l.code = genCode(); l.shared = true; touch(l); save();
+    await pushSharedNow(l); subscribeShared(l); checkBadges();
+    openShareSheet(l);
+  } catch (e) { toast('Could not start sharing — check your connection'); }
+}
+function stopSharing(id) {
+  const l = getList(id); if (!l) return;
+  const code = l.code; l.shared = false; l.code = null; touch(l); save();
+  if (code) unsubscribeShared(code);
+  closeSheet(); rerender(); toast('Stopped syncing — this copy is now private');
+}
+async function joinByCode(raw) {
+  const code = cleanCode(raw);
+  if (code.length < 4) throw new Error('Enter the full code');
+  if (!CLOUD_ENABLED) throw new Error('Cloud sharing is not set up yet');
+  const existing = state.lists.find(x => x.code === code);
+  if (existing) { subscribeShared(existing); return existing; }
+  const c = await ensureAuthToken();
+  const snap = await c.fs.getDoc(c.fs.doc(c.db, 'shared', code));
+  if (!snap.exists()) throw new Error('No list found with that code');
+  const rl = normRemoteList(snap.data());
+  const l = mkList(rl ? rl.color : undefined);
+  l.title = rl ? rl.title : ''; l.items = rl ? rl.items : []; l.code = code; l.shared = true;
+  l.updatedAt = snap.data().updatedAt || Date.now();
+  state.lists.unshift(l); save(); subscribeShared(l); checkBadges();
+  return l;
 }
 
 /* ---- registration database: a profile record per signed-up user ----
@@ -678,18 +832,28 @@ function openSettingsSheet() {
 
 /* ---- Achievements (its own full-height screen: Badges + Ranking) ---- */
 let achvTab = 'badges';
+function badgeCardHTML(b) {
+  const earned = badgeEarned(b);
+  const pct = Math.round(badgeValue(b) / b.goal * 100);
+  return `<div class="badge-card ${earned ? 'earned' : 'locked'}">
+    ${earned ? `<span class="badge-check">${I.check}</span>` : ''}
+    <span class="badge-ic">${b.icon}</span>
+    <span class="badge-name">${esc(b.name)}</span>
+    <span class="badge-desc">${esc(b.desc)}</span>
+    ${earned ? '' : `<span class="badge-prog"><i style="width:${pct}%"></i></span>`}
+  </div>`;
+}
 function badgesHTML() {
-  return `<div class="badge-grid">` + BADGES.map(b => {
-    const earned = badgeEarned(b);
-    const pct = Math.round(badgeValue(b) / b.goal * 100);
-    return `<div class="badge-card ${earned ? 'earned' : 'locked'}">
-      ${earned ? `<span class="badge-check">${I.check}</span>` : ''}
-      <span class="badge-ic">${b.icon}</span>
-      <span class="badge-name">${esc(b.name)}</span>
-      <span class="badge-desc">${esc(b.desc)}</span>
-      ${earned ? '' : `<span class="badge-prog"><i style="width:${pct}%"></i></span>`}
+  // Grouped by category with a small section header + per-section earned count.
+  return BADGE_CATS.map(cat => {
+    const items = BADGES.filter(b => b.cat === cat.id);
+    if (!items.length) return '';
+    const got = items.filter(badgeEarned).length;
+    return `<div class="badge-cat">
+      <div class="badge-cat-head"><span>${esc(cat.label)}</span><span class="badge-cat-count">${got}/${items.length}</span></div>
+      <div class="badge-grid">${items.map(badgeCardHTML).join('')}</div>
     </div>`;
-  }).join('') + `</div>`;
+  }).join('');
 }
 function rankingHTML() {
   if (!CLOUD_ENABLED || !session || session.provider !== 'cloud') {
@@ -850,6 +1014,7 @@ function initAuth() {
   if (!CLOUD_ENABLED) return;            // local/guest only — nothing async to do
   ensureCloud().then(c => {
     c.authm.onAuthStateChanged(c.auth, u => {
+      if (u && u.isAnonymous) return;        // anonymous = shared-list access only, never an account session
       if (u) {
         if (!session || session.uid !== u.uid || session.provider !== 'cloud') {
           activateSession({ uid: u.uid, email: u.email || '', username: u.displayName || (u.email || 'You').split('@')[0], provider: 'cloud' }).then(() => rerender());
@@ -953,7 +1118,7 @@ function ListCard(l) {
   const t = titleOr(l), q = norm(homeQuery);
   return `<button class="card" style="--c:${l.color}" data-open="${l.id}" aria-label="${esc(t || 'Untitled list')}">
     <span class="card-top">
-      <span class="swatch-dot">${l.pinned ? `<span class="pin-flag">${I.pin}</span>` : ''}</span>
+      <span class="swatch-dot">${l.pinned ? `<span class="pin-flag">${I.pin}</span>` : ''}${l.shared ? `<span class="share-flag" aria-label="Shared list">${I.users}</span>` : ''}</span>
       <span class="card-menu" data-menu="${l.id}" role="button" aria-label="List options">${I.dots}</span>
     </span>
     <span class="card-title ${t ? '' : 'untitled'}">${t ? hl(t, q) : 'Untitled'}</span>
@@ -969,7 +1134,7 @@ function ListCard(l) {
 function ItemRow(it) {
   return `<div class="item-wrap">
     <div class="item ${it.done ? 'done' : ''}" data-id="${it.id}">
-      <span class="handle" data-handle aria-label="Drag to reorder">${I.grip}</span>
+      <span class="handle" data-handle aria-label="Double-tap, then drag to reorder">${I.grip}</span>
       <button class="check" data-check="${it.id}" role="checkbox" aria-checked="${it.done}" aria-label="${esc(stripFmt(it.text))}">${I.tick}</button>
       <span class="item-text" data-edit="${it.id}"><span class="tx">${fmtText(it.text)}</span></span>
       <button class="item-del" data-del="${it.id}" aria-label="Delete item">${I.trash}</button>
@@ -1020,7 +1185,7 @@ function renderDetail() {
   if (ti.value !== l.title) ti.value = l.title;
 
   const done = l.items.filter(i => i.done).length, total = l.items.length;
-  $('#detail-meta').innerHTML = `<span class="chip-color"></span>${total ? `${done} of ${total} done` : 'Empty list'}${l.pinned ? ' · pinned' : ''}`;
+  $('#detail-meta').innerHTML = `<span class="chip-color"></span>${total ? `${done} of ${total} done` : 'Empty list'}${l.pinned ? ' · pinned' : ''}${l.shared ? ' · shared' : ''}`;
   $('#progress').style.display = total ? '' : 'none';
   $('#progress-fill').style.width = (total ? Math.round(done / total * 100) : 0) + '%';
 
@@ -1104,39 +1269,27 @@ function toggleVoice() {
   try { rec.start(); } catch (e) { }
 }
 
-/* ====================== 6c. Drag to reorder (long-press) ====================== */
-let drag = null, pressTimer = null;
+/* ====================== 6c. Drag to reorder (double-tap the grip) ======================
+   A single touch/swipe on the grip scrolls the list normally (pan-y) — nothing
+   is intercepted, so scrolling is NEVER affected. A DOUBLE-TAP on the grip grabs
+   that row: keep your finger down on the second tap and drag up/down to move it,
+   release to drop. (Works with mouse double-click + drag on desktop too.) */
+let drag = null;
+let lastGripTap = 0, lastGripX = 0, lastGripY = 0;
 function onPointerDown(e) {
   const handle = e.target.closest('[data-handle]');
-  if (handle) {
-    const row = handle.closest('.item');
-    if (!row) return;
-    /* Long-press (400 ms hold without moving) triggers drag.
-       Finger movement > 8 px before the timer fires cancels it and lets
-       native pan-y scroll take over — so normal scrolling works everywhere. */
-    let timer = null, moved = false;
-    const startY = e.clientY, startX = e.clientX, pId = e.pointerId;
-    function onMove(me) {
-      if (!moved && (Math.abs(me.clientY - startY) > 8 || Math.abs(me.clientX - startX) > 8)) {
-        moved = true; clearTimeout(timer); timer = null; cleanup();
-      }
-    }
-    function onUp() { clearTimeout(timer); timer = null; cleanup(); }
-    function cleanup() {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-    }
-    timer = setTimeout(() => {
-      timer = null;
-      if (!moved) { cleanup(); startDrag(row, startY, pId); }
-    }, 400);
-    window.addEventListener('pointermove', onMove, { passive: true });
-    window.addEventListener('pointerup', onUp, { once: true });
-    window.addEventListener('pointercancel', onUp, { once: true });
+  if (!handle) return;                       // anywhere else → 100% native scroll
+  const row = handle.closest('.item'); if (!row) return;
+  const now = Date.now();
+  const near = Math.abs(e.clientX - lastGripX) < 32 && Math.abs(e.clientY - lastGripY) < 32;
+  if (now - lastGripTap < 340 && near) {
+    lastGripTap = 0;
+    try { e.preventDefault(); } catch (_) { }   // this gesture is a drag, not a scroll
+    startDrag(row, e.clientY, e.pointerId);
     return;
   }
-  // All other touches: 100% native scroll. Click listener handles taps (never fires during scroll).
+  // First tap: just record it. A plain swipe on the grip still scrolls (pan-y).
+  lastGripTap = now; lastGripX = e.clientX; lastGripY = e.clientY;
 }
 function startDrag(row, startY, pointerId) {
   if (!row) return;
@@ -1222,7 +1375,7 @@ function toggleItem(itemId) {
   buzz(it.done ? 10 : 6);
   const done = l.items.filter(i => i.done).length, total = l.items.length;
   $('#progress-fill').style.width = Math.round(done / total * 100) + '%';
-  $('#detail-meta').innerHTML = `<span class="chip-color"></span>${done} of ${total} done${l.pinned ? ' · pinned' : ''}`;
+  $('#detail-meta').innerHTML = `<span class="chip-color"></span>${done} of ${total} done${l.pinned ? ' · pinned' : ''}${l.shared ? ' · shared' : ''}`;
   if (nowComplete && !wasComplete) toast('List complete ✓');
   checkBadges();
 }
@@ -1328,6 +1481,7 @@ function openDetailMenu(id) {
       <button class="menu-item" data-act="pin" data-id="${id}">${l.pinned ? I.unpin + ' Unpin from home' : I.pin + ' Pin to top'}</button>
       <button class="menu-item ${l.tidy ? 'on' : ''}" data-act="tidy" data-id="${id}">${I.sink} Keep checked at bottom <span class="mi-note">${l.tidy ? 'On' : 'Off'}</span></button>
       <button class="menu-item" data-act="color" data-id="${id}">${I.palette} Change colour</button>
+      <button class="menu-item ${l.shared ? 'on' : ''}" data-act="share" data-id="${id}">${I.users} ${l.shared ? 'Sharing — show code' : 'Share &amp; collaborate'}${l.shared ? ` <span class="mi-note">${esc(l.code)}</span>` : ''}</button>
       <button class="menu-item" data-act="cleardone" data-id="${id}">${I.broom} Clear checked items</button>
       <button class="menu-item" data-act="duplicate" data-id="${id}">${I.duplicate} Duplicate list</button>
       <div class="menu-sep"></div>
@@ -1346,6 +1500,69 @@ function openColorSheet(id) {
 function setColor(id, hex) {
   const l = getList(id); if (!l) return;
   l.color = hex; touch(l); save(); buzz(8); closeSheet(); rerender();
+}
+
+/* ---- collaborative sharing sheets ---- */
+function shareMessage(l) {
+  const url = location.origin + location.pathname;
+  return `Join my QuickList "${stripFmt(l.title) || 'list'}" — open ${url} , tap Join and enter code:  ${l.code}`;
+}
+function openShareSheet(l) {
+  if (typeof l === 'string') l = getList(l); if (!l) return;
+  openSheet(`
+    <h2 class="sheet-title">Share &amp; collaborate</h2>
+    <p class="sheet-sub">Anyone with this code can open and edit this list — no account needed. Changes sync live for everyone.</p>
+    <div class="share-code" id="share-code">${esc(l.code || '')}</div>
+    <div class="sheet-actions">
+      <button class="btn btn-soft" data-act="copycode" data-id="${l.id}">${I.copy} Copy code</button>
+      <button class="btn btn-c" style="--c:#21A971;--on:#fff" data-act="sharecode" data-id="${l.id}">${I.whatsapp} Share</button>
+    </div>
+    <div class="menu-list">
+      <button class="menu-item danger" data-act="stopshare" data-id="${l.id}">${I.trash} Stop sharing this copy</button>
+    </div>
+    <p class="auth-foot">${I.shield}<span>The code is like a key — only share it with people you want editing the list.</span></p>
+  `);
+}
+function openJoinSheet() {
+  openSheet(`
+    <h2 class="sheet-title">Join a shared list</h2>
+    <p class="sheet-sub">Enter a code someone shared with you to open their list and edit it together — no account needed.</p>
+    <form id="join-form" class="auth-form" autocomplete="off">
+      <input class="field code-input" name="code" placeholder="ABC123" autocapitalize="characters" autocomplete="off" maxlength="10" aria-label="List code">
+      <p class="auth-error" id="join-error" role="alert"></p>
+      <button class="btn btn-c btn-block" style="--c:#5A63E0;--on:#fff" type="submit">Join list</button>
+    </form>
+    <p class="auth-foot">${I.users}<span>${CLOUD_ENABLED ? 'You and everyone with the code see the same list, live.' : 'Cloud sharing isn\'t set up on this build yet.'}</span></p>
+  `);
+}
+async function handleJoinSubmit(form) {
+  const err = $('#join-error'), btn = form.querySelector('button[type=submit]');
+  const code = (new FormData(form).get('code') || '').trim();
+  if (err) err.textContent = '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Joining…'; }
+  try {
+    const l = await joinByCode(code);
+    closeSheet(); showDetail(l.id); toast('Joined the list');
+  } catch (e) {
+    if (err) err.textContent = (e && e.message) || 'Could not join';
+    if (btn) { btn.disabled = false; btn.textContent = 'Join list'; }
+  }
+}
+async function shareCodeOut(id) {
+  const l = getList(id); if (!l || !l.code) return;
+  const msg = shareMessage(l);
+  try {
+    if (navigator.share) { await navigator.share({ text: msg }); return; }
+  } catch (e) { return; /* user cancelled native share */ }
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank', 'noopener');
+}
+async function copyCode(id) {
+  const l = getList(id); if (!l || !l.code) return;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(l.code);
+    else { const ta = document.createElement('textarea'); ta.value = l.code; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+    buzz(10); toast('Code copied');
+  } catch (e) { toast('Could not copy'); }
 }
 
 /* ====================== 6g. Scroll + minimal custom scrollbar ======================
@@ -1457,10 +1674,16 @@ document.addEventListener('click', e => {
     else if (act === 'duplicate') { closeSheet(); setTimeout(() => duplicateList(id), 60); }
     else if (act === 'cleardone') { closeSheet(); clearDone(id); }
     else if (act === 'delete') { closeSheet(); setTimeout(() => deleteList(id), 60); }
+    else if (act === 'share') { closeSheet(); setTimeout(() => createShare(id), 60); }
+    else if (act === 'stopshare') { stopSharing(id); }
+    else if (act === 'copycode') { copyCode(id); }
+    else if (act === 'sharecode') { shareCodeOut(id); }
+    else if (act === 'join') { openJoinSheet(); }
   }
 });
 
 $('#fab').addEventListener('click', () => { const l = createList(); showDetail(l.id); setTimeout(() => $('#add-input').focus(), 320); });
+$('#join-fab').addEventListener('click', openJoinSheet);
 $('#sort-btn').addEventListener('click', openFindSheet);
 $('#achv-btn').addEventListener('click', () => { achvTab = 'badges'; openAchievementsSheet(); });
 $('#settings-btn').addEventListener('click', openSettingsSheet);
@@ -1468,6 +1691,7 @@ $('#avatar').addEventListener('click', () => { authMode = 'signin'; openAccountS
 document.addEventListener('submit', e => {
   if (e.target.id === 'auth-form') { e.preventDefault(); handleAuthSubmit(e.target); }
   if (e.target.id === 'reset-form') { e.preventDefault(); handleResetSubmit(e.target); }
+  if (e.target.id === 'join-form') { e.preventDefault(); handleJoinSubmit(e.target); }
 });
 $('#detail-back').addEventListener('click', () => { try { document.activeElement && document.activeElement.blur(); } catch (e) { } navBack(); });
 $('#detail-copy').addEventListener('click', () => copyList(view.id));
@@ -1569,6 +1793,7 @@ function init() {
   $('#detail-menu').innerHTML = I.dots;
   $('#sort-btn').innerHTML = I.sliders;
   $('#achv-btn').innerHTML = I.trophy;
+  $('#join-fab').innerHTML = I.users;
   $('#settings-btn').innerHTML = I.gear;
   $('#search-ic').innerHTML = I.search;
   $('#search-clear').innerHTML = I.x;
@@ -1584,6 +1809,7 @@ function init() {
   refreshAccountUI();
   snapshotBadges();            // baseline so existing progress doesn't fire "unlocked" toasts on load
   initScrollbar();
+  resubscribeAllShared();      // resume live sync for any lists shared on this device
   showHome(false);
   syncSend();
   initAuth();                  // async; failures stay contained, app already usable
