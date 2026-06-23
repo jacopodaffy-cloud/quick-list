@@ -16,8 +16,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <!-- Apply the saved theme before paint (external file = CSP-safe, no inline) -->
-  <script src="theme.js?v=28"></script>
-  <link rel="stylesheet" href="app.css?v=28">
+  <script src="theme.js?v=29"></script>
+  <link rel="stylesheet" href="app.css?v=29">
 </head>
 <body>
 <noscript><div style="padding:40px;font-family:system-ui">QuickList needs JavaScript to run.</div></noscript>
@@ -81,10 +81,12 @@
         <span class="fmt-hint">Select text, then tap</span>
       </div>
       <form id="addbar">
-        <input id="add-input" placeholder="Add an item…  (paste a list, or “milk x2”)" enterkeyhint="done" autocomplete="off">
+        <input id="add-input" placeholder="Add an item…  (paste, or “milk x2”)" enterkeyhint="done" autocomplete="off">
+        <button type="button" class="img-btn" id="img-btn" aria-label="Add a photo"></button>
         <button type="button" class="mic-btn" id="mic" aria-label="Dictate by voice"></button>
         <button type="submit" class="add-send" id="add-send" aria-label="Add"></button>
       </form>
+      <input type="file" id="img-input" accept="image/*" hidden>
     </div>
   </section>
 
@@ -94,7 +96,7 @@
   <div id="sheet-root"></div>
   <div id="toast-root"></div>
 </div>
-<script src="config.js?v=28"></script>
-<script src="app.js?v=28"></script>
+<script src="config.js?v=29"></script>
+<script src="app.js?v=29"></script>
 </body>
 </html>

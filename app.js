@@ -56,7 +56,8 @@ const norm = s => String(s).trim().toLowerCase();
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /* ---- input sanitisation: trim, strip control chars, cap length ---- */
-const MAX = { title: 80, item: 200, items: 500, lists: 500, user: 40, email: 120, pw: 200 };
+const MAX = { title: 80, item: 200, items: 500, lists: 500, user: 40, email: 120, pw: 200, img: 900000 };
+const isImgData = s => typeof s === 'string' && /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(s) && s.length <= MAX.img;
 const cleanText = (s, max) => String(s == null ? '' : s).replace(new RegExp('[\\u0000-\\u001F\\u007F]','g'), '').replace(/\s+/g, ' ').trim().slice(0, max || 200);
 
 function showFatal(err) {
@@ -122,6 +123,8 @@ const I = {
   check: ic('<path d="m20 6-11 11-5-5"/>'),
   users: ic('<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 5.2a3.2 3.2 0 0 1 0 6.1"/><path d="M21.5 20a6.5 6.5 0 0 0-4.5-6.2"/>'),
   link: ic('<path d="M9 15l6-6"/><path d="M11 6.5l1.2-1.2a3.5 3.5 0 0 1 5 5L16 11.5"/><path d="M13 17.5l-1.2 1.2a3.5 3.5 0 0 1-5-5L8 12.5"/>'),
+  camera: ic('<path d="M3 8.5A2 2 0 0 1 5 6.5h1.5l1-1.8a1.5 1.5 0 0 1 1.3-.7h4.4a1.5 1.5 0 0 1 1.3.7l1 1.8H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><circle cx="12" cy="13" r="3.3"/>'),
+  image: ic('<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="m4 18 5-5 4 4 3-3 4 4"/>'),
 };
 const GOOGLE_G = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M22.5 12.2c0-.68-.06-1.36-.18-2.02H12v3.83h5.9a5.05 5.05 0 0 1-2.19 3.31v2.74h3.54c2.07-1.91 3.25-4.72 3.25-7.86z"/><path fill="#34A853" d="M12 23c2.94 0 5.42-.97 7.23-2.64l-3.54-2.74c-.98.66-2.24 1.05-3.69 1.05-2.84 0-5.25-1.92-6.11-4.5H2.23v2.83A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.89 14.17a6.6 6.6 0 0 1 0-4.34V7H2.23a11 11 0 0 0 0 9.99l3.66-2.82z"/><path fill="#EA4335" d="M12 4.75c1.6 0 3.04.55 4.18 1.62l3.13-3.13C17.42 1.46 14.94.5 12 .5A11 11 0 0 0 2.23 7l3.66 2.83C6.75 6.67 9.16 4.75 12 4.75z"/></svg>';
 
@@ -219,8 +222,9 @@ function normalize(s) {
             text: cleanText(i.text, MAX.item),
             done: !!i.done,
             qty: (Number.isFinite(i.qty) && i.qty > 1) ? Math.min(999, Math.floor(i.qty)) : null,
+            img: isImgData(i.img) ? i.img : null,
           }))
-          .filter(i => i.text.length > 0),
+          .filter(i => i.text.length > 0 || i.img),   // keep image-only items
       })),
   };
   return out;
@@ -240,7 +244,7 @@ function save() {
   for (const l of state.lists) if (l.shared && l.code) schedulePushShared(l);   // collaborative lists
 }
 
-const mkItem = (text, done = false, qty = null) => ({ id: uid(), text: cleanText(text, MAX.item), done: !!done, qty: qty && qty > 1 ? Math.min(999, Math.floor(qty)) : null });
+const mkItem = (text, done = false, qty = null, img = null) => ({ id: uid(), text: cleanText(text, MAX.item), done: !!done, qty: qty && qty > 1 ? Math.min(999, Math.floor(qty)) : null, img: isImgData(img) ? img : null });
 function mkList(color) {
   return { id: uid(), title: '', color: color || nextColor(), items: [], pinned: false, tidy: false, createdAt: Date.now(), updatedAt: Date.now() };
 }
@@ -541,16 +545,30 @@ function subscribeShared(l) {
 function unsubscribeShared(code) { if (sharedUnsubs[code]) { try { sharedUnsubs[code](); } catch (e) { } delete sharedUnsubs[code]; } }
 function resubscribeAllShared() { if (!CLOUD_ENABLED) return; for (const l of (state.lists || [])) if (l.shared && l.code) subscribeShared(l); }
 
+/* Map Firebase failures to a message that tells the user exactly what to fix
+   (the two one-time setup steps), instead of a vague "try again". */
+function shareErrMsg(e) {
+  const code = (e && e.code) || '';
+  if (/operation-not-allowed/.test(code)) return 'Turn on "Anonymous" sign-in in your Firebase console, then retry.';
+  if (/permission-denied|insufficient/.test(code)) return 'Deploy the Firestore rules first (firestore.rules), then retry.';
+  if (/network|unavailable|failed/.test(code)) return 'Network problem — check your connection and try again.';
+  return (e && !e.code && e.message) || 'Something went wrong — try again.';
+}
 async function createShare(id) {
   const l = getList(id); if (!l) return;
   if (l.shared && l.code) return openShareSheet(l);
   if (!CLOUD_ENABLED) { toast('Cloud sharing is not set up yet'); return; }
+  toast('Creating share link…');
   try {
-    await ensureAuthToken();
-    l.code = genCode(); l.shared = true; touch(l); save();
-    await pushSharedNow(l); subscribeShared(l); checkBadges();
+    const c = await ensureAuthToken();
+    const code = genCode();
+    // Write FIRST and await it: if the rules aren't deployed or anon auth is off,
+    // this throws and we surface the reason — we never show a code that doesn't work.
+    await c.fs.setDoc(c.fs.doc(c.db, 'shared', code), sharePayload({ ...l, code, shared: true }));
+    l.code = code; l.shared = true; touch(l); save();
+    subscribeShared(l); checkBadges();
     openShareSheet(l);
-  } catch (e) { toast('Could not start sharing — check your connection'); }
+  } catch (e) { toast(shareErrMsg(e)); }
 }
 function stopSharing(id) {
   const l = getList(id); if (!l) return;
@@ -1166,7 +1184,8 @@ function ItemRow(it) {
     <div class="item ${it.done ? 'done' : ''}" data-id="${it.id}">
       <span class="handle" data-handle aria-label="Double-tap, then drag to reorder">${I.grip}</span>
       <button class="check" data-check="${it.id}" role="checkbox" aria-checked="${it.done}" aria-label="${esc(stripFmt(it.text))}">${I.tick}</button>
-      <span class="item-text" data-edit="${it.id}"><span class="tx">${fmtText(it.text)}</span></span>
+      <span class="item-text ${it.text ? '' : (it.img ? 'photo-only' : '')}" data-edit="${it.id}"><span class="tx">${fmtText(it.text)}</span></span>
+      ${it.img ? `<button class="item-img" data-img="${it.id}" aria-label="View photo"><img src="${it.img}" alt="" loading="lazy"></button>` : ''}
       <button class="item-del" data-del="${it.id}" aria-label="Delete item">${I.trash}</button>
       ${it.qty > 1 ? `<button class="qty" data-qty="${it.id}" aria-label="Quantity ${it.qty}, tap to add one">×${it.qty}</button>` : ''}
     </div>
@@ -1274,6 +1293,94 @@ function bumpQty(id) {
   if (b) { b.textContent = '×' + it.qty; b.style.transform = 'scale(1.25)'; setTimeout(() => b.style.transform = '', 130); }
 }
 function syncSend() { $('#add-send').disabled = !$('#add-input').value.trim(); }
+
+/* ====================== 6a-2. Photos on items ======================
+   An item can hold an optional photo (with or without text). Images are
+   downscaled & re-encoded to a small JPEG data-URL on-device, so they store in
+   localStorage, sync to shared lists via Firestore, and work fully offline —
+   no Firebase Storage needed. */
+/* Resize the longest side to <=maxDim and compress until under ~targetBytes. */
+function compressImage(file, maxDim = 1000, targetBytes = 280000) {
+  return new Promise((resolve, reject) => {
+    if (!file || !/^image\//.test(file.type)) return reject(new Error('That file is not an image'));
+    // Read as a data: URL (NOT a blob: object URL) — the strict CSP blocks blob:
+    // images on purpose, but allows data:. Then draw to a canvas and re-encode.
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that image'));
+    reader.onload = () => {
+      const im = new Image();
+      im.onerror = () => reject(new Error('Could not read that image'));
+      im.onload = () => {
+        let w = im.naturalWidth, h = im.naturalHeight;
+        const scale = Math.min(1, maxDim / Math.max(w, h));
+        w = Math.max(1, Math.round(w * scale)); h = Math.max(1, Math.round(h * scale));
+        const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        const ctx = cv.getContext('2d'); ctx.drawImage(im, 0, 0, w, h);
+        let q = 0.72, data = cv.toDataURL('image/jpeg', q), guard = 0;
+        while (data.length > targetBytes && guard++ < 7) {
+          q -= 0.12;
+          if (q < 0.35) { w = Math.round(w * 0.82); h = Math.round(h * 0.82); cv.width = w; cv.height = h; ctx.drawImage(im, 0, 0, w, h); q = 0.6; }
+          data = cv.toDataURL('image/jpeg', Math.max(0.32, q));
+        }
+        resolve(data);
+      };
+      im.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+let imgTarget = 'new';        // 'new' or an existing item id
+function pickImageFor(target) { imgTarget = target || 'new'; const inp = $('#img-input'); if (inp) { inp.value = ''; inp.click(); } }
+async function onImagePicked(file) {
+  if (!file) return;
+  if (view.name !== 'detail') return;
+  try {
+    toast('Adding photo…');
+    const data = await compressImage(file);
+    if (data.length > MAX.img) { toast('That photo is too large'); return; }
+    const l = getList(view.id); if (!l) return;
+    const target = imgTarget;
+    if (target !== 'new') {
+      const it = l.items.find(i => i.id === target);
+      if (it) { it.img = data; touch(l); save(); buzz(8); renderDetail(); return; }
+    }
+    // new item: compose with any typed text
+    const raw = $('#add-input').value.trim();
+    const parsed = raw ? smartLine(raw) : null;
+    l.items.push(mkItem(parsed ? parsed.text : '', parsed ? parsed.done : false, parsed ? parsed.qty : null, data));
+    if (l.tidy) tidySort(l);
+    $('#add-input').value = ''; syncSend();
+    touch(l); save(); buzz(8); renderDetail();
+    requestAnimationFrame(() => { const d = $('#page-detail'); if (d) d.scrollTo({ top: d.scrollHeight, behavior: 'smooth' }); updateScrollbar(); });
+  } catch (e) { toast((e && e.message) || 'Could not add photo'); }
+}
+/* Fullscreen photo viewer with Replace / Remove. */
+function openImage(itemId) {
+  const l = getList(view.id); const it = l && l.items.find(i => i.id === itemId);
+  if (!it || !it.img) return;
+  const lb = document.createElement('div'); lb.className = 'lightbox';
+  lb.innerHTML = `<img src="${it.img}" alt="Item photo">
+    <div class="lb-actions">
+      <button class="btn btn-soft" data-lb="replace" data-id="${itemId}">${I.camera}<span>Replace</span></button>
+      <button class="btn btn-danger" data-lb="remove" data-id="${itemId}">${I.trash}<span>Remove</span></button>
+    </div>
+    <button class="lb-close" data-lb="close" aria-label="Close">${I.x}</button>`;
+  document.body.appendChild(lb);
+  requestAnimationFrame(() => lb.classList.add('show'));
+  lb.addEventListener('click', e => {
+    const b = e.target.closest('[data-lb]');
+    const kind = b ? b.dataset.lb : (e.target === lb ? 'close' : '');
+    if (kind === 'close') { lb.classList.remove('show'); setTimeout(() => lb.remove(), 200); }
+    else if (kind === 'replace') { lb.remove(); pickImageFor(itemId); }
+    else if (kind === 'remove') { lb.remove(); removeItemImage(itemId); }
+  });
+}
+function removeItemImage(itemId) {
+  const l = getList(view.id); const it = l && l.items.find(i => i.id === itemId); if (!it) return;
+  it.img = null;
+  if (!it.text.trim()) { const idx = l.items.indexOf(it); if (idx >= 0) l.items.splice(idx, 1); }   // image-only item → remove when emptied
+  touch(l); save(); buzz(8); renderDetail(); toast('Photo removed');
+}
 
 /* ====================== 6b. Voice ====================== */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1441,7 +1548,7 @@ function listToText(l) {
   const lines = [];
   const t = l.title.trim();
   if (t) { lines.push(t); lines.push(''); }
-  l.items.forEach(it => lines.push((it.done ? '✓ ' : '• ') + stripFmt(it.text) + (it.qty > 1 ? ` ×${it.qty}` : '')));
+  l.items.forEach(it => { const t = stripFmt(it.text) || (it.img ? '📷 Photo' : ''); lines.push((it.done ? '✓ ' : '• ') + t + (it.img && it.text ? ' 📷' : '') + (it.qty > 1 ? ` ×${it.qty}` : '')); });
   return lines.join('\n');
 }
 function shareWhatsApp(id) {
@@ -1575,7 +1682,7 @@ async function handleJoinSubmit(form) {
     const l = await joinByCode(code);
     closeSheet(); showDetail(l.id); toast('Joined the list');
   } catch (e) {
-    if (err) err.textContent = (e && e.message) || 'Could not join';
+    if (err) err.textContent = shareErrMsg(e);
     if (btn) { btn.disabled = false; btn.textContent = 'Join list'; }
   }
 }
@@ -1744,11 +1851,15 @@ $('#add-input').addEventListener('paste', e => {
   if (/[\n,]/.test(txt) && txt.trim()) { e.preventDefault(); addItems(txt); $('#add-input').value = ''; syncSend(); }
 });
 $('#mic').addEventListener('click', toggleVoice);
+$('#img-btn').addEventListener('click', () => pickImageFor('new'));
+$('#img-input').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) onImagePicked(f); });
 
 $('#items').addEventListener('pointerdown', onPointerDown);
 // Tap item text to edit — click never fires during scroll, so this never conflicts
 $('#items').addEventListener('click', e => {
   if (drag) return;
+  const img = e.target.closest('[data-img]');
+  if (img) { openImage(img.dataset.img); return; }
   const text = e.target.closest('.item-text');
   if (text) beginEdit(text.dataset.edit);
 });
@@ -1831,6 +1942,7 @@ function init() {
   $('#search-ic').innerHTML = I.search;
   $('#search-clear').innerHTML = I.x;
   $('#mic').innerHTML = I.mic;
+  $('#img-btn').innerHTML = I.camera;
   $('#add-send').innerHTML = I.send;
   $('#fab-icon').innerHTML = I.plus;
   if (!SR) $('#mic').style.display = 'none';

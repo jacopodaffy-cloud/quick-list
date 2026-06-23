@@ -1,6 +1,6 @@
 /* QuickList service worker — network-first with offline fallback */
-const CACHE = 'quicklist-v29';
-const ASSETS = ['./', './index.html', './theme.js?v=28', './config.js?v=28', './app.css?v=28', './app.js?v=28', './manifest.webmanifest', './icon.svg', './icon-maskable.svg', './icon-192.png', './icon-512.png'];
+const CACHE = 'quicklist-v30';
+const ASSETS = ['./', './index.html', './theme.js?v=29', './config.js?v=29', './app.css?v=29', './app.js?v=29', './manifest.webmanifest', './icon.svg', './icon-maskable.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
