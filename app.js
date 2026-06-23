@@ -678,20 +678,20 @@ async function doGoogle() {
   const c = await ensureCloud();
   const provider = new c.authm.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  // Popup first — it works in nearly every modern browser (mobile included) and,
-  // unlike redirect, doesn't depend on third-party cookies on the auth domain
-  // (which is exactly what made Google sign-in fail on GitHub Pages). If the
-  // popup is blocked or unsupported (in-app WebViews, strict blockers), fall
-  // back to a full-page redirect; getRedirectResult (in ensureCloud) finishes it.
+  // Use browserPopupRedirectResolver explicitly so the popup works inside TWA
+  // (Android Chrome Custom Tab) without falling back to a full-page redirect.
+  // signInWithRedirect is intentionally avoided: TWA environments don't preserve
+  // sessionStorage across redirects, causing "missing initial state" errors.
+  const resolver = c.authm.browserPopupRedirectResolver;
   try {
-    const res = await c.authm.signInWithPopup(c.auth, provider);
+    const res = await c.authm.signInWithPopup(c.auth, provider, resolver);
     const u = res.user;
     await activateSession({ uid: u.uid, email: u.email || '', username: u.displayName || (u.email || 'You').split('@')[0], provider: 'cloud' }, { adoptGuest: true });
   } catch (e) {
     const code = (e && e.code) || '';
-    if (/popup-blocked|operation-not-supported-in-this-environment|web-storage-unsupported|missing-or-invalid-nonce/i.test(code)) {
-      await c.authm.signInWithRedirect(c.auth, provider);   // page navigates away
-      return;
+    // If popup is blocked in a strict environment, guide the user to email/password
+    if (/popup-blocked|operation-not-supported-in-this-environment|web-storage-unsupported/i.test(code)) {
+      throw new Error('Google sign-in popup was blocked. Please use email/password instead.');
     }
     throw e;   // popup-closed-by-user, network, etc. → surface a real message
   }
