@@ -4,8 +4,10 @@ const config: CapacitorConfig = {
   appId: 'app.quicklist.twa',
   appName: 'QuickList',
   webDir: 'www',
-  // No server.url: the APK bundles the web files directly (www/).
-  // This means JS/CSS fixes take effect with each build — no firebase deploy needed.
+  server: {
+    url: 'https://qwicklist-v3.web.app',
+    cleartext: false
+  },
   android: {
     backgroundColor: '#14161B'
   }
