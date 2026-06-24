@@ -1953,7 +1953,16 @@ function init() {
   syncSend();
   initAuth();                  // async; failures stay contained, app already usable
 
-  try { if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js'); } catch (e) { }
+  // Register the SW only on the web (PWA offline). In the native APK (Capacitor)
+  // the assets are already bundled locally, so we SKIP the SW — this prevents any
+  // stale cached shell from masking an app update.
+  try {
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !window.Capacitor) {
+      navigator.serviceWorker.register('sw.js');
+    } else if (window.Capacitor && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
+    }
+  } catch (e) { }
   checkForceUpdate();
 }
 try { init(); } catch (err) { showFatal(err); }
