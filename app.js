@@ -1182,7 +1182,7 @@ function ListCard(l) {
 function ItemRow(it) {
   return `<div class="item-wrap">
     <div class="item ${it.done ? 'done' : ''}" data-id="${it.id}">
-      <span class="handle" data-handle aria-label="Hold to drag and reorder">${I.grip}</span>
+      <span class="handle" data-handle aria-label="Drag to reorder">${I.grip}</span>
       <button class="check" data-check="${it.id}" role="checkbox" aria-checked="${it.done}" aria-label="${esc(stripFmt(it.text))}">${I.tick}</button>
       <span class="item-text ${it.text ? '' : (it.img ? 'photo-only' : '')}" data-edit="${it.id}"><span class="tx">${fmtText(it.text)}</span></span>
       ${it.img ? `<button class="item-img" data-img="${it.id}" aria-label="View photo"><img src="${it.img}" alt="" loading="lazy"></button>` : ''}
@@ -1412,28 +1412,16 @@ function toggleVoice() {
    is intercepted, so scrolling is NEVER affected. HOLD the grip for 300 ms to
    grab that row, then drag up/down to reorder and release to drop. */
 let drag = null;
-let gripTimer = null, gripData = null;
+/* Press the grip (the six dots) and drag immediately — no long-press, no
+   double-tap. The grip has touch-action:none (CSS) so pressing it starts the
+   drag at once; touching anywhere ELSE on the list scrolls natively as before,
+   so the scroll is unchanged. */
 function onPointerDown(e) {
   const handle = e.target.closest('[data-handle]');
   if (!handle) return;                       // anywhere else → 100% native scroll
   const row = handle.closest('.item'); if (!row) return;
-  gripData = { id: e.pointerId, y: e.clientY, x: e.clientX, row };
-  gripTimer = setTimeout(() => {
-    if (!gripData) return;
-    const d = gripData; gripData = null; gripTimer = null;
-    startDrag(d.row, d.y, d.id);
-  }, 300);
-}
-function onGripPointerMove(e) {
-  if (!gripData) return;
-  // Cancel if the finger moved — user is scrolling, not holding
-  if (Math.abs(e.clientY - gripData.y) > 8 || Math.abs(e.clientX - gripData.x) > 8) {
-    clearTimeout(gripTimer); gripTimer = null; gripData = null;
-  }
-}
-function onGripPointerUp() {
-  if (gripTimer) { clearTimeout(gripTimer); gripTimer = null; }
-  gripData = null;
+  e.preventDefault();
+  startDrag(row, e.clientY, e.pointerId);
 }
 function startDrag(row, startY, pointerId) {
   if (!row) return;
@@ -1861,9 +1849,6 @@ $('#img-btn').addEventListener('click', () => pickImageFor('new'));
 $('#img-input').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) onImagePicked(f); });
 
 $('#items').addEventListener('pointerdown', onPointerDown);
-$('#items').addEventListener('pointermove', onGripPointerMove, { passive: true });
-$('#items').addEventListener('pointerup', onGripPointerUp);
-$('#items').addEventListener('pointercancel', onGripPointerUp);
 // Tap item text to edit — click never fires during scroll, so this never conflicts
 $('#items').addEventListener('click', e => {
   if (drag) return;

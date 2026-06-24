@@ -408,7 +408,7 @@ svg { display: block; }
   width: 40px; align-self: stretch; flex: 0 0 40px;
   display: grid; place-items: center;
   color: var(--ink-3);
-  cursor: grab; touch-action: pan-y;  /* pan-y = native scroll works; long-press (400ms) starts drag */
+  cursor: grab; touch-action: none;  /* none = pressing the grip drags immediately; the rest of the list still scrolls natively */
   border-radius: 12px 0 0 12px;
 }
 .handle:active { color: var(--ink-2); }
