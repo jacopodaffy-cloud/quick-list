@@ -736,9 +736,16 @@ async function doGoogle() {
     await activateSession({ uid: u.uid, email: u.email || '', username: u.displayName || (u.email || 'You').split('@')[0], provider: 'cloud' }, { adoptGuest: true });
   } catch (e) {
     const code = (e && e.code) || '';
-    // If popup is blocked in a strict environment, guide the user to email/password
+    // Popup unavailable (blocked, or a browser that can't open one): fall back to a
+    // full-page redirect. The browser navigates to Google, then returns to the app,
+    // and getRedirectResult() inside ensureCloud() completes the sign-in on reload.
     if (/popup-blocked|operation-not-supported-in-this-environment|web-storage-unsupported/i.test(code)) {
-      throw new Error('Google sign-in popup was blocked. Please use email/password instead.');
+      try {
+        await c.authm.signInWithRedirect(c.auth, provider, resolver);
+        return;   // page navigates away here; resumes after the redirect
+      } catch (e2) {
+        throw new Error('Google sign-in is unavailable in this browser. Please use email/password.');
+      }
     }
     throw e;   // popup-closed-by-user, network, etc. → surface a real message
   }
