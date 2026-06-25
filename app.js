@@ -725,10 +725,26 @@ async function doGoogle() {
   const c = await ensureCloud();
   const provider = new c.authm.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
+
+  // Native app (Android/iOS): the web OAuth popup/redirect can't run inside the
+  // bundled WebView, so do a real native Google sign-in via the Capacitor Firebase
+  // Authentication plugin, then sign the JS SDK in with the token it returns.
+  const FA = window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function'
+    && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins
+    && window.Capacitor.Plugins.FirebaseAuthentication;
+  if (FA) {
+    const result = await FA.signInWithGoogle();
+    const idToken = result && result.credential && result.credential.idToken;
+    if (!idToken) throw new Error('Google sign-in did not complete. Please try again.');
+    const cred = c.authm.GoogleAuthProvider.credential(idToken);
+    const res = await c.authm.signInWithCredential(c.auth, cred);
+    const u = res.user;
+    await activateSession({ uid: u.uid, email: u.email || '', username: u.displayName || (u.email || 'You').split('@')[0], provider: 'cloud' }, { adoptGuest: true });
+    return;
+  }
+
   // Use browserPopupRedirectResolver explicitly so the popup works inside TWA
   // (Android Chrome Custom Tab) without falling back to a full-page redirect.
-  // signInWithRedirect is intentionally avoided: TWA environments don't preserve
-  // sessionStorage across redirects, causing "missing initial state" errors.
   const resolver = c.authm.browserPopupRedirectResolver;
   try {
     const res = await c.authm.signInWithPopup(c.auth, provider, resolver);
@@ -824,7 +840,7 @@ function openAccountSheet() {
   openSheet(`
     <h2 class="sheet-title">${signup ? 'Create your account' : 'Welcome back'}</h2>
     <p class="sheet-sub">${CLOUD_ENABLED ? 'Save your lists and pick up where you left off on any device.' : 'Keep your lists behind a login on this device. Add cloud config for cross-device sync.'}</p>
-    ${!window.Capacitor ? `<button class="btn-google" data-auth="google">${GOOGLE_G}<span>Continue with Google</span></button><div class="auth-or"><span>or</span></div>` : ''}
+    <button class="btn-google" data-auth="google">${GOOGLE_G}<span>Continue with Google</span></button><div class="auth-or"><span>or</span></div>
     <form id="auth-form" class="auth-form" autocomplete="on">
       ${signup ? `<input class="field" name="username" placeholder="Username" autocomplete="username" required>` : ''}
       <input class="field" name="id" type="${signup ? 'email' : 'text'}" placeholder="${signup ? 'Email' : (CLOUD_ENABLED ? 'Email' : 'Email or username')}" autocomplete="${signup ? 'email' : 'username'}" ${signup && CLOUD_ENABLED ? 'required' : ''} ${signup ? 'inputmode="email"' : ''}>
