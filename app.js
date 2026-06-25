@@ -821,7 +821,7 @@ function openAccountSheet() {
     <form id="auth-form" class="auth-form" autocomplete="on">
       ${signup ? `<input class="field" name="username" placeholder="Username" autocomplete="username" required>` : ''}
       <input class="field" name="id" type="${signup ? 'email' : 'text'}" placeholder="${signup ? 'Email' : (CLOUD_ENABLED ? 'Email' : 'Email or username')}" autocomplete="${signup ? 'email' : 'username'}" ${signup && CLOUD_ENABLED ? 'required' : ''} ${signup ? 'inputmode="email"' : ''}>
-      <input class="field" name="password" type="password" placeholder="Password" autocomplete="${signup ? 'new-password' : 'current-password'}" required>
+      <input class="field" name="password" type="password" placeholder="${signup ? 'Password (8+ characters)' : 'Password'}" autocomplete="${signup ? 'new-password' : 'current-password'}" required>
       <p class="auth-error" id="auth-error" role="alert"></p>
       <button class="btn btn-c btn-block" type="submit" id="auth-submit">${signup ? 'Create account' : 'Sign in'}</button>
     </form>
@@ -1005,6 +1005,39 @@ async function handleAuth(kind) {
   if (kind === 'cancel-delete') { closeSheet(); return; }
   if (kind === 'confirm-delete') { await deleteAccount(); return; }
 }
+/* ---- sign-up validation (standard, like a normal app): valid email, a strong
+   enough password, and no offensive words in the username/email. The profanity
+   filter de-leets (sh1t→shit, c@zzo→cazzo) then substring-matches a curated
+   EN+IT word list. */
+const WEAK_PW = ['password', 'password1', '12345678', '123456789', '1234567890', '11111111', '00000000', 'qwertyui', 'qwerty123', 'iloveyou', 'letmein1', 'abc12345', 'football', 'baseball', 'sunshine', 'princess', 'dragon12', 'monkey12', '11223344', 'aaaaaaaa'];
+const PROFANITY = [
+  'fuck', 'shit', 'bitch', 'cunt', 'asshole', 'motherfucker', 'bullshit', 'dickhead', 'pussy', 'whore', 'slut', 'faggot', 'nigger', 'nigga', 'retard', 'rapist', 'cumshot', 'blowjob', 'wanker', 'bollocks', 'jerkoff', 'dumbass', 'jackass', 'bastard',
+  'cazzo', 'merda', 'stronzo', 'stronza', 'puttana', 'troia', 'vaffanculo', 'vaffa', 'coglione', 'frocio', 'froci', 'mignotta', 'minchia', 'zoccola', 'inculo', 'ricchione', 'succhiacazzi', 'testadicazzo'
+];
+function deLeet(s) {
+  return String(s == null ? '' : s).toLowerCase()
+    .replace(/[@4]/g, 'a').replace(/3/g, 'e').replace(/[1!|]/g, 'i').replace(/0/g, 'o').replace(/[5$]/g, 's').replace(/7/g, 't')
+    .replace(/[^a-z]/g, '');
+}
+function hasProfanity(s) { const n = deLeet(s); return n.length > 0 && PROFANITY.some(w => n.includes(w)); }
+function validateSignup(f) {
+  const u = (f.username || '').trim(), email = (f.email || '').trim(), pw = f.password || '';
+  if (u.length < 2) return 'Choose a username (at least 2 characters).';
+  if (u.length > 30) return 'Username is too long (max 30 characters).';
+  if (!/[a-zA-Z0-9]/.test(u)) return 'Username must contain letters or numbers.';
+  if (hasProfanity(u)) return 'Please choose a username without offensive words.';
+  if (CLOUD_ENABLED || email) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return 'Enter a valid email address.';
+    if (email.length > MAX.email) return 'That email address is too long.';
+    if (hasProfanity(email.split('@')[0])) return 'Please use an email without offensive words.';
+  }
+  if (pw.length < 8) return 'Password must be at least 8 characters.';
+  if (pw.length > MAX.pw) return 'That password is too long.';
+  if (!/[a-zA-Z]/.test(pw)) return 'Password must include at least one letter.';
+  if (WEAK_PW.includes(pw.toLowerCase())) return 'That password is too common — choose a stronger one.';
+  return null;
+}
+
 async function handleAuthSubmit(form) {
   if (authBusy) return;
   const fd = new FormData(form);
@@ -1012,6 +1045,7 @@ async function handleAuthSubmit(form) {
   const f = mode === 'signup'
     ? { username: (fd.get('username') || '').trim(), email: (fd.get('id') || '').trim(), password: fd.get('password') || '' }
     : { id: (fd.get('id') || '').trim(), password: fd.get('password') || '' };
+  if (mode === 'signup') { const err = validateSignup(f); if (err) { setAuthError(err); return; } }
   if (mode === 'signin') { const blk = rlBlocked(); if (blk) { setAuthError(rlMessage(blk)); return; } }
   setAuthError(''); setAuthBusy(true);
   try {
