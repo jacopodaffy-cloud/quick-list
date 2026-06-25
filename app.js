@@ -1674,7 +1674,11 @@ async function handleJoinSubmit(form) {
   if (btn) { btn.disabled = true; btn.textContent = 'Joining…'; }
   try {
     const l = await joinByCode(code);
-    closeSheet(); showDetail(l.id); toast('Joined the list');
+    // Close the sheet FIRST and let its history.back() settle, THEN open the
+    // list. Doing both in the same tick corrupted the back stack so the
+    // top-left back button couldn't return home. (Same pattern as menu "Open".)
+    closeSheet();
+    setTimeout(() => { showDetail(l.id); toast('Joined the list'); }, 80);
   } catch (e) {
     if (err) err.textContent = shareErrMsg(e);
     if (btn) { btn.disabled = false; btn.textContent = 'Join list'; }
