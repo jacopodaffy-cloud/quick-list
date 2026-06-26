@@ -50,6 +50,14 @@ jobs:
       - name: Sync web assets into the Android project
         run: npx cap sync android
 
+      - name: Configure native Firebase (google-services + native Google sign-in)
+        run: |
+          cp google-services.json android/app/google-services.json
+          sed -i "/com.android.tools.build:gradle/a\\        classpath 'com.google.gms:google-services:4.4.2'" android/build.gradle
+          echo "apply plugin: 'com.google.gms.google-services'" >> android/app/build.gradle
+          echo "=== classpaths ===" ; grep -n "classpath" android/build.gradle
+          echo "=== app/build.gradle tail ===" ; tail -3 android/app/build.gradle
+
       - name: Set custom app icon
         run: |
           pip install Pillow --break-system-packages -q
@@ -58,7 +66,7 @@ jobs:
       - name: Override variables.gradle and version code
         run: |
           cp variables.gradle android/variables.gradle
-          sed -i 's/versionCode 1/versionCode 37/g' android/app/build.gradle
+          sed -i 's/versionCode 1/versionCode 38/g' android/app/build.gradle
           echo "=== variables.gradle ==="
           cat android/variables.gradle
           echo "=== versionCode ==="
@@ -85,6 +93,34 @@ jobs:
             -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
             -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+
+      - name: Smoke test — boot an emulator and verify the app actually opens
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            adb install -r android/app/build/outputs/apk/release/app-release.apk
+            adb logcat -c
+            adb shell monkey -p app.quicklist.twa -c android.intent.category.LAUNCHER 1
+            sleep 12
+            echo "===== PROCESS CHECK ====="
+            (adb shell pidof app.quicklist.twa && echo "RESULT: PROCESS ALIVE (app stayed open)") || echo "RESULT: NOT RUNNING (likely crashed on launch)"
+            echo "===== CRASH SCAN ====="
+            adb logcat -d > lc.txt
+            if grep -q "FATAL EXCEPTION" lc.txt; then
+              echo "RESULT: FATAL EXCEPTION FOUND — stack trace below"
+              grep -B3 -A45 "FATAL EXCEPTION" lc.txt
+            else
+              echo "RESULT: no FATAL EXCEPTION (good)"
+            fi
+            echo "===== RELEVANT LOGS ====="
+            grep -iE "quicklist|firebaseauth|firebase|google|AndroidRuntime|Capacitor|chromium" lc.txt | tail -80 || true
 
       - name: Upload AAB (Play Store)
         uses: actions/upload-artifact@v4
