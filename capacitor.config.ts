@@ -11,15 +11,6 @@ const config: CapacitorConfig = {
   // bundled code was ignored and updates never showed.)
   android: {
     backgroundColor: '#14161B'
-  },
-  plugins: {
-    // Native Google sign-in. skipNativeAuth: the plugin returns the Google token
-    // and we sign the JS Firebase SDK in with it (the app already uses the JS SDK
-    // for Firestore), instead of keeping a separate native auth session.
-    FirebaseAuthentication: {
-      skipNativeAuth: true,
-      providers: ['google.com']
-    }
   }
 };
 

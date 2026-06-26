@@ -50,17 +50,6 @@ jobs:
       - name: Sync web assets into the Android project
         run: npx cap sync android
 
-      - name: Configure native Firebase (google-services + Google sign-in)
-        run: |
-          cp google-services.json android/app/google-services.json
-          # Add the Google Services Gradle plugin (generates default_web_client_id
-          # from google-services.json, which the native Google sign-in needs).
-          sed -i "/com.android.tools.build:gradle/a\\        classpath 'com.google.gms:google-services:4.4.2'" android/build.gradle
-          echo "apply plugin: 'com.google.gms.google-services'" >> android/app/build.gradle
-          echo "=== android/build.gradle classpaths ===" ; grep -n "classpath" android/build.gradle
-          echo "=== app/build.gradle tail ===" ; tail -3 android/app/build.gradle
-          echo "=== google-services.json present ===" ; ls -l android/app/google-services.json
-
       - name: Set custom app icon
         run: |
           pip install Pillow --break-system-packages -q
@@ -69,7 +58,7 @@ jobs:
       - name: Override variables.gradle and version code
         run: |
           cp variables.gradle android/variables.gradle
-          sed -i 's/versionCode 1/versionCode 36/g' android/app/build.gradle
+          sed -i 's/versionCode 1/versionCode 37/g' android/app/build.gradle
           echo "=== variables.gradle ==="
           cat android/variables.gradle
           echo "=== versionCode ==="
