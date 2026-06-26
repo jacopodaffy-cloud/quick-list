@@ -50,13 +50,13 @@ jobs:
       - name: Sync web assets into the Android project
         run: npx cap sync android
 
-      - name: Configure native Firebase (google-services + native Google sign-in)
+      - name: Configure native Google Sign-In (web client id)
         run: |
-          cp google-services.json android/app/google-services.json
-          sed -i "/com.android.tools.build:gradle/a\\        classpath 'com.google.gms:google-services:4.4.2'" android/build.gradle
-          echo "apply plugin: 'com.google.gms.google-services'" >> android/app/build.gradle
-          echo "=== classpaths ===" ; grep -n "classpath" android/build.gradle
-          echo "=== app/build.gradle tail ===" ; tail -3 android/app/build.gradle
+          # The lightweight @codetrix-studio/capacitor-google-auth plugin reads the
+          # OAuth web client id from this string resource on Android.
+          STR=android/app/src/main/res/values/strings.xml
+          sed -i 's#</resources>#    <string name="server_client_id">491197590751-13eaa8v0e0478r59476r25kjj6ahm9vl.apps.googleusercontent.com</string>\n</resources>#' "$STR"
+          echo "=== strings.xml ===" ; cat "$STR"
 
       - name: Set custom app icon
         run: |
@@ -66,7 +66,7 @@ jobs:
       - name: Override variables.gradle and version code
         run: |
           cp variables.gradle android/variables.gradle
-          sed -i 's/versionCode 1/versionCode 38/g' android/app/build.gradle
+          sed -i 's/versionCode 1/versionCode 39/g' android/app/build.gradle
           echo "=== variables.gradle ==="
           cat android/variables.gradle
           echo "=== versionCode ==="
@@ -98,12 +98,12 @@ jobs:
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
-          target: google_apis
+          api-level: 29
+          target: default
           arch: x86_64
           force-avd-creation: false
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 2048
-          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: false
           script: |
             set +e
             APK=android/app/build/outputs/apk/release/app-release.apk

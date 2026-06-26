@@ -13,12 +13,13 @@ const config: CapacitorConfig = {
     backgroundColor: '#14161B'
   },
   plugins: {
-    // Native Google sign-in. skipNativeAuth: the plugin returns the Google token and
-    // we sign the JS Firebase SDK in with it (the app already uses the JS SDK for
-    // Firestore), rather than keeping a separate native auth session.
-    FirebaseAuthentication: {
-      skipNativeAuth: true,
-      providers: ['google.com']
+    // Native Google sign-in (lightweight — only Google Sign-In via play-services-auth,
+    // NO Firebase native SDK, so nothing Firebase initializes at app launch). We hand
+    // the returned idToken to the Firebase JS SDK the app already uses for Firestore.
+    GoogleAuth: {
+      scopes: ['profile', 'email'],
+      serverClientId: '491197590751-13eaa8v0e0478r59476r25kjj6ahm9vl.apps.googleusercontent.com',
+      forceCodeForRefreshToken: false
     }
   }
 };

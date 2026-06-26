@@ -7,10 +7,9 @@
     "android:apk": "cap add android && cap sync android && cd android && gradlew assembleDebug"
   },
   "dependencies": {
-    "@capacitor-firebase/authentication": "6.3.1",
     "@capacitor/android": "^6.1.2",
     "@capacitor/core": "^6.1.2",
-    "firebase": "10.12.5"
+    "@codetrix-studio/capacitor-google-auth": "3.4.0-rc.4"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.1.2",

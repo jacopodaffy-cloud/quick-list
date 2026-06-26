@@ -726,16 +726,16 @@ async function doGoogle() {
   const provider = new c.authm.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
-  // Native app: real native Google sign-in via the Capacitor Firebase
-  // Authentication plugin (web popups/redirects can't run in the bundled WebView),
-  // then sign the JS SDK in with the returned token. Lazy — runs only on tap — so
-  // any Google misconfig surfaces as a message here and never blocks app launch.
-  const FA = window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function'
+  // Native app: real native Google sign-in via the Capacitor GoogleAuth plugin
+  // (web popups/redirects can't run in the bundled WebView), then sign the Firebase
+  // JS SDK in with the returned idToken. Lazy — runs only on tap — so any Google
+  // misconfig surfaces as a message here and never blocks app launch.
+  const GA = window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function'
     && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins
-    && window.Capacitor.Plugins.FirebaseAuthentication;
-  if (FA) {
-    const result = await FA.signInWithGoogle();
-    const idToken = result && result.credential && result.credential.idToken;
+    && window.Capacitor.Plugins.GoogleAuth;
+  if (GA) {
+    const gu = await GA.signIn();
+    const idToken = gu && gu.authentication && gu.authentication.idToken;
     if (!idToken) throw new Error('Google sign-in did not complete. Please try again.');
     const cred = c.authm.GoogleAuthProvider.credential(idToken);
     const res = await c.authm.signInWithCredential(c.auth, cred);
