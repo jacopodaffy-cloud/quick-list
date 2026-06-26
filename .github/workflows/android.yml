@@ -102,25 +102,43 @@ jobs:
           target: google_apis
           arch: x86_64
           force-avd-creation: false
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 2048
           disable-animations: true
           script: |
-            adb install -r android/app/build/outputs/apk/release/app-release.apk
+            set +e
+            APK=android/app/build/outputs/apk/release/app-release.apk
+            echo "===== WAIT FOR FULL BOOT ====="
+            adb wait-for-device
+            for i in $(seq 1 90); do
+              [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && { echo "boot_completed after ${i}x2s"; break; }
+              sleep 2
+            done
+            adb shell settings put global package_verifier_enable 0 >/dev/null 2>&1
+            sleep 5
+            echo "===== INSTALL (with retries) ====="
+            for i in 1 2 3 4 5 6; do
+              echo "-- install attempt $i --"
+              adb install -r -d "$APK" && { echo "INSTALL OK"; break; }
+              adb kill-server >/dev/null 2>&1; adb start-server >/dev/null 2>&1; adb wait-for-device
+              sleep 10
+            done
             adb logcat -c
+            echo "===== LAUNCH ====="
             adb shell monkey -p app.quicklist.twa -c android.intent.category.LAUNCHER 1
-            sleep 12
+            sleep 14
             echo "===== PROCESS CHECK ====="
             (adb shell pidof app.quicklist.twa && echo "RESULT: PROCESS ALIVE (app stayed open)") || echo "RESULT: NOT RUNNING (likely crashed on launch)"
             echo "===== CRASH SCAN ====="
             adb logcat -d > lc.txt
             if grep -q "FATAL EXCEPTION" lc.txt; then
               echo "RESULT: FATAL EXCEPTION FOUND — stack trace below"
-              grep -B3 -A45 "FATAL EXCEPTION" lc.txt
+              grep -B3 -A50 "FATAL EXCEPTION" lc.txt
             else
               echo "RESULT: no FATAL EXCEPTION (good)"
             fi
             echo "===== RELEVANT LOGS ====="
-            grep -iE "quicklist|firebaseauth|firebase|google|AndroidRuntime|Capacitor|chromium" lc.txt | tail -80 || true
+            grep -iE "quicklist|firebaseauth|firebase|google|AndroidRuntime|Capacitor|chromium" lc.txt | tail -80
+            exit 0
 
       - name: Upload AAB (Play Store)
         uses: actions/upload-artifact@v4
