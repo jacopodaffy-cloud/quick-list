@@ -267,7 +267,7 @@ function deleteList(id) {
 function duplicateList(id) {
   const src = getList(id); if (!src) return;
   const copy = { ...src, id: uid(), pinned: false, title: src.title ? src.title + ' copy' : '', items: src.items.map(it => mkItem(it.text, it.done, it.qty)), createdAt: Date.now(), updatedAt: Date.now() };
-  state.lists.unshift(copy); bumpStat('created'); save(); checkBadges(); showDetail(copy.id); toast('List duplicated');
+  state.lists.unshift(copy); bumpStat('created'); save(); checkBadges(); openDetailFromSheet(copy.id); toast('List duplicated');
 }
 function clearDone(id) {
   const l = getList(id); if (!l) return;
@@ -388,8 +388,8 @@ function levelOf(p = points()) { return Math.floor(Math.sqrt(p / 25)) + 1; }   /
 
 /* Celebrate a badge the first time it is earned (per session). Snapshot the
    already-earned set at load so reopening the app doesn't re-toast. */
-let seenBadges = null;
-function snapshotBadges() { seenBadges = new Set(BADGES.filter(badgeEarned).map(b => b.id)); }
+let seenBadges = null, lastLevel = null;
+function snapshotBadges() { seenBadges = new Set(BADGES.filter(badgeEarned).map(b => b.id)); lastLevel = levelOf(); }
 function checkBadges() {
   if (!seenBadges) { snapshotBadges(); schedulePublishRank(); return; }
   for (const b of BADGES) {
@@ -399,7 +399,38 @@ function checkBadges() {
       toast(`${b.icon} Badge unlocked — ${b.name}`, 'View', () => { achvTab = 'badges'; openAchievementsSheet(); });
     }
   }
+  // Level-up moment — fired after the badge loop so it's the toast that stays
+  // visible. Most actions that change points route through here (create / check /
+  // complete / duplicate / share), so the level on Home is always in step.
+  const lvl = levelOf();
+  if (lastLevel != null && lvl > lastLevel) {
+    celebrate();
+    buzz(26);
+    toast(`🎉 Level up — you reached Level ${lvl}`, 'View', () => { achvTab = 'badges'; openAchievementsSheet(); });
+  }
+  lastLevel = lvl;
   schedulePublishRank();
+}
+// A short, premium confetti burst for wins (list completed, level up). Purely
+// decorative; removes itself. Transform-based so it never blocks any content.
+function celebrate() {
+  try {
+    const wrap = document.createElement('div');
+    wrap.className = 'confetti';
+    const colors = PALETTE.map(p => p.hex);
+    let html = '';
+    for (let i = 0; i < 28; i++) {
+      const c = colors[i % colors.length];
+      const x = ((Math.random() * 2 - 1) * 170).toFixed(0);
+      const y = (-(70 + Math.random() * 200)).toFixed(0);
+      const r = ((Math.random() * 2 - 1) * 420).toFixed(0);
+      const delay = (Math.random() * 90).toFixed(0);
+      html += `<i style="--c:${c};--x:${x}px;--y:${y}px;--r:${r}deg;animation-delay:${delay}ms"></i>`;
+    }
+    wrap.innerHTML = html;
+    document.body.appendChild(wrap);
+    setTimeout(() => wrap.remove(), 1400);
+  } catch (e) { }
 }
 
 /* ====================== 3b. Accounts & Sync ======================
@@ -734,13 +765,38 @@ async function doGoogle() {
     && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins
     && window.Capacitor.Plugins.GoogleAuth;
   if (GA) {
-    const gu = await GA.signIn();
+    // The Web OAuth client id (type 3). The native plugin exchanges the chosen
+    // Google account for an idToken we then hand to the Firebase JS SDK.
+    const WEB_CLIENT_ID = '491197590751-13eaa8v0e0478r59476r25kjj6ahm9vl.apps.googleusercontent.com';
+    // Initialise the plugin BEFORE signIn(). Calling signIn() on an uninitialised
+    // native client could throw at the Java layer (which JS can't catch) and take
+    // the whole app down — the "tapping Google exits QuickList" bug. initialize()
+    // is idempotent and safe to call on every tap; we swallow its result so a
+    // missing method on an older plugin build never blocks the real sign-in.
+    try {
+      if (typeof GA.initialize === 'function') {
+        await GA.initialize({ clientId: WEB_CLIENT_ID, scopes: ['profile', 'email'], grantOfflineAccess: false });
+      }
+      console.log('[QL] native Google: initialised, opening picker');
+    } catch (e) { console.warn('[QL] native Google initialize failed (continuing):', (e && e.message) || e); }
+    let gu;
+    try {
+      gu = await GA.signIn();
+    } catch (e) {
+      // A real, catchable failure (user cancelled, no Play Services, config error).
+      // Surface a message and keep the app open — never let it bubble.
+      console.warn('[QL] native Google signIn failed:', (e && (e.code || e.message)) || e);
+      const m = (e && (e.message || e.code) || '').toString();
+      if (/cancel|12501|popup_closed/i.test(m)) return;            // user backed out — no error UI
+      throw new Error('Google sign-in didn’t complete on this device. You can sign in with email instead.');
+    }
     const idToken = gu && gu.authentication && gu.authentication.idToken;
     if (!idToken) throw new Error('Google sign-in did not complete. Please try again.');
     const cred = c.authm.GoogleAuthProvider.credential(idToken);
     const res = await c.authm.signInWithCredential(c.auth, cred);
     const u = res.user;
     await activateSession({ uid: u.uid, email: u.email || '', username: u.displayName || (u.email || 'You').split('@')[0], provider: 'cloud' }, { adoptGuest: true });
+    console.log('[QL] native Google: signed in', u.uid);
     return;
   }
 
@@ -1170,6 +1226,24 @@ function showDetail(id, push = true) {
 }
 const rerender = () => view.name === 'detail' ? renderDetail() : renderHome();
 
+// Open a list straight from an open sheet, deterministically. The old pattern
+// (closeSheet() → history.back() → setTimeout → showDetail() → pushState) was a
+// timing race: on a slow device the pushState could land before the back's
+// popstate, leaving a phantom history entry, so the list's back button needed
+// several taps to leave (the "can't exit a shared list" bug). Instead we remove
+// the sheet's DOM now and REPLACE its single history entry with the detail entry
+// — one atomic step, so back works on the first tap.
+function openDetailFromSheet(id) {
+  if (!getList(id)) return;
+  if (sheetOpen()) {
+    closeSheetNow();
+    if (histOK) { try { history.replaceState({ v: 'detail', id }, ''); } catch (e) { histOK = false; } }
+    showDetail(id, false);
+  } else {
+    showDetail(id);
+  }
+}
+
 /* ====================== 5. Components (markup) ====================== */
 const titleOr = l => l.title.trim();
 const progress = l => { const t = l.items.length; return t ? l.items.filter(i => i.done).length / t : 1.1; };
@@ -1259,7 +1333,7 @@ function renderHome() {
   const ls = homeView();
   const filtering = !!(homeQuery.trim() || state.filterColor);
   $('#home-sub').textContent = total
-    ? (filtering ? `${ls.length} of ${total} shown` : `${total} ${total === 1 ? 'list' : 'lists'}`)
+    ? (filtering ? `${ls.length} of ${total} shown` : `${total} ${total === 1 ? 'list' : 'lists'} · Level ${levelOf()}`)
     : 'Tap + to start';
   $('#search-wrap').hidden = total === 0;
   $('#search-clear').hidden = !homeQuery;
@@ -1568,7 +1642,7 @@ function toggleItem(itemId) {
   const done = l.items.filter(i => i.done).length, total = l.items.length;
   $('#progress-fill').style.width = Math.round(done / total * 100) + '%';
   $('#detail-meta').innerHTML = `<span class="chip-color"></span>${done} of ${total} done${l.pinned ? ' · pinned' : ''}${l.shared ? ' · shared' : ''}`;
-  if (nowComplete && !wasComplete) toast('List complete ✓');
+  if (nowComplete && !wasComplete) { celebrate(); toast('🎉 List complete · +15 points'); }
   checkBadges();
 }
 function deleteItem(itemId) {
@@ -1734,11 +1808,10 @@ async function handleJoinSubmit(form) {
   if (btn) { btn.disabled = true; btn.textContent = 'Joining…'; }
   try {
     const l = await joinByCode(code);
-    // Close the sheet FIRST and let its history.back() settle, THEN open the
-    // list. Doing both in the same tick corrupted the back stack so the
-    // top-left back button couldn't return home. (Same pattern as menu "Open".)
-    closeSheet();
-    setTimeout(() => { showDetail(l.id); toast('Joined the list'); }, 80);
+    // Deterministic hand-off from the join sheet to the list (no history race) so
+    // the back button leaves the list on the first tap. See openDetailFromSheet.
+    openDetailFromSheet(l.id);
+    toast('Joined the list');
   } catch (e) {
     if (err) err.textContent = shareErrMsg(e);
     if (btn) { btn.disabled = false; btn.textContent = 'Join list'; }
@@ -1863,13 +1936,13 @@ document.addEventListener('click', e => {
 
   if (t.dataset.act) {
     const id = t.dataset.id, act = t.dataset.act;
-    if (act === 'open') { closeSheet(); setTimeout(() => showDetail(id), 60); }
+    if (act === 'open') { openDetailFromSheet(id); }
     else if (act === 'pin') { closeSheet(); togglePin(id); rerender(); }
     else if (act === 'tidy') { closeSheet(); toggleTidy(id); }
     else if (act === 'color') { closeSheet(); setTimeout(() => openColorSheet(id), 280); }
     else if (act === 'copy') { closeSheet(); copyList(id); }
     else if (act === 'whatsapp') { closeSheet(); shareWhatsApp(id); }
-    else if (act === 'duplicate') { closeSheet(); setTimeout(() => duplicateList(id), 60); }
+    else if (act === 'duplicate') { duplicateList(id); }
     else if (act === 'cleardone') { closeSheet(); clearDone(id); }
     else if (act === 'delete') { closeSheet(); setTimeout(() => deleteList(id), 60); }
     else if (act === 'share') { closeSheet(); setTimeout(() => createShare(id), 60); }
@@ -2016,6 +2089,20 @@ function init() {
   showHome(false);
   syncSend();
   initAuth();                  // async; failures stay contained, app already usable
+
+  // Native Android hardware back + edge-swipe gesture. Route it through the SAME
+  // in-app navigation as the on-screen back arrow, and only EXIT the app when
+  // we're already on Home with nothing open. Without this the OS back gesture
+  // left the app straight away instead of returning to the previous page.
+  try {
+    const CApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+    if (CApp && typeof CApp.addListener === 'function') {
+      CApp.addListener('backButton', () => {
+        if (sheetOpen() || view.name === 'detail') navBack();
+        else CApp.exitApp();
+      });
+    }
+  } catch (e) { }
 
   // Register the SW only on the web (PWA offline). In the native APK (Capacitor)
   // the assets are already bundled locally, so we SKIP the SW — this prevents any

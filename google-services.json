@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "491197590751",
+    "project_id": "qwicklist-d8ee6",
+    "storage_bucket": "qwicklist-d8ee6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:491197590751:android:ee28893d578f7455104d6a",
+        "android_client_info": {
+          "package_name": "app.quicklist.twa"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "491197590751-c8upq1r4oe37tjbbcvupfehnf19vkc4n.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.quicklist.twa",
+            "certificate_hash": "8edb5edfc3e27d34b36f27df3db3bace08f289a7"
+          }
+        },
+        {
+          "client_id": "491197590751-13eaa8v0e0478r59476r25kjj6ahm9vl.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB5vxy5ylVB9tV7JZjv6i215KznXVRrV1s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "491197590751-13eaa8v0e0478r59476r25kjj6ahm9vl.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

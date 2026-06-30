@@ -28,6 +28,26 @@
     .error { color: #ff6b6b; font-size: 0.9rem; }
     .refresh { background: none; border: 1px solid #2a2a4a; color: #888; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; }
     .refresh:hover { border-color: #7c83ff; color: #7c83ff; }
+    /* expandable "all lists" browser */
+    tr.user-row { cursor: pointer; }
+    tr.user-row td:first-child::before { content: '▸'; color: #7c83ff; display: inline-block; width: 14px; transition: transform .15s; }
+    tr.user-row.open td:first-child::before { transform: rotate(90deg); }
+    tr.lists-row > td { background: #12182b; padding: 0; }
+    tr.lists-row .lists-wrap { padding: 14px 18px 18px 46px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+    .list-block { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 10px; padding: 12px; }
+    .lb-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .lb-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 0 2px #00000040 inset; }
+    .lb-title { font-weight: 600; color: #e8e8e8; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lb-count { margin-left: auto; font-size: 0.72rem; color: #888; background: #7c83ff18; padding: 2px 7px; border-radius: 20px; flex: 0 0 auto; }
+    .items { display: flex; flex-direction: column; gap: 3px; }
+    .il { font-size: 0.82rem; color: #b8b8c8; padding-left: 14px; position: relative; }
+    .il::before { content: '○'; position: absolute; left: 0; color: #555; font-size: 0.7rem; }
+    .il.done { color: #6a6a78; text-decoration: line-through; }
+    .il.done::before { content: '●'; color: #7c83ff; }
+    .items.empty, .lists-none { color: #666; font-size: 0.82rem; padding: 4px 0; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tab { padding: 8px 16px; border-radius: 8px; border: 1px solid #2a2a4a; background: none; color: #888; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+    .tab.on { background: #7c83ff; color: #fff; border-color: #7c83ff; }
   </style>
 </head>
 <body>
@@ -54,7 +74,7 @@
       <div class="stat"><div class="stat-value" id="stat-lists">—</div><div class="stat-label">Liste create</div></div>
       <div class="stat"><div class="stat-value" id="stat-items">—</div><div class="stat-label">Elementi totali</div></div>
     </div>
-    <div class="section-title">Utenti registrati</div>
+    <div class="section-title">Utenti registrati <span style="font-weight:400;color:#666;font-size:0.8rem">· clicca una riga per vedere tutte le sue liste</span></div>
     <div id="loading" class="loading">Caricamento...</div>
     <table id="user-table" style="display:none">
       <thead>
@@ -130,6 +150,38 @@
 
   const fmt = ms => Number.isFinite(ms) ? new Date(ms).toLocaleString('it-IT') : '—';
 
+  // Strip the app's lightweight inline formatting markers for clean display.
+  const stripMarks = s => String(s == null ? '' : s).replace(/\*\*(.+?)\*\*/g, '$1').replace(/__(.+?)__/g, '$1');
+  const safeColor = c => /^#[0-9a-fA-F]{3,8}$/.test(c || '') ? c : '#7c83ff';
+
+  // Render one user's full set of lists (title, colour, items, progress).
+  function listsBlockHTML(lists) {
+    if (!lists || !lists.length) return '<div class="lists-none">No lists.</div>';
+    return lists.map(l => {
+      const items = Array.isArray(l.items) ? l.items : [];
+      const done = items.filter(i => i && i.done).length;
+      const title = (l.title && String(l.title).trim()) ? stripMarks(l.title) : 'Untitled';
+      const itemsHtml = items.length
+        ? `<div class="items">${items.map(i => `<span class="il ${i && i.done ? 'done' : ''}">${esc(stripMarks(i && i.text))}</span>`).join('')}</div>`
+        : '<div class="items empty">empty</div>';
+      return `<div class="list-block">
+        <div class="lb-head"><span class="lb-dot" style="background:${esc(safeColor(l.color))}"></span><span class="lb-title">${esc(title)}</span><span class="lb-count">${done}/${items.length}</span></div>
+        ${itemsHtml}
+      </div>`;
+    }).join('');
+  }
+
+  // Expand / collapse a user's lists (one delegated listener; tbody is stable).
+  document.getElementById('user-tbody').addEventListener('click', e => {
+    const row = e.target.closest('tr.user-row');
+    if (!row) return;
+    const det = document.getElementById('lists-' + row.dataset.uid);
+    if (!det) return;
+    const open = det.hidden;
+    det.hidden = !open;
+    row.classList.toggle('open', open);
+  });
+
   async function loadUsers() {
     document.getElementById('loading').style.display = 'block';
     document.getElementById('user-table').style.display = 'none';
@@ -151,6 +203,7 @@
       const tbody = document.getElementById('user-tbody');
       tbody.innerHTML = '';
 
+      let html = '';
       rows.forEach(u => {
         const data = u._data || {};
         const lists = data.lists || [];
@@ -161,7 +214,7 @@
         const name = u.displayName || u.email || u.uid;
         const last = u.lastLoginAt || data.updatedAt;
 
-        tbody.innerHTML += `<tr>
+        html += `<tr class="user-row" data-uid="${esc(u.uid)}">
           <td>${esc(name)}<div style="font-size:0.72rem;color:#888">${esc(u.email || '')}</div></td>
           <td style="font-family:monospace;font-size:0.72rem;color:#888">${esc(u.uid)}</td>
           <td><span class="badge">${esc(u.provider || '—')}</span></td>
@@ -169,8 +222,10 @@
           <td><span class="badge">${items | 0}</span></td>
           <td style="color:#888">${esc(fmt(u.createdAt))}</td>
           <td style="color:#888">${esc(fmt(last))}</td>
-        </tr>`;
+        </tr>
+        <tr class="lists-row" id="lists-${esc(u.uid)}" hidden><td colspan="7"><div class="lists-wrap">${listsBlockHTML(lists)}</div></td></tr>`;
       });
+      tbody.innerHTML = html;
 
       document.getElementById('stat-users').textContent = rows.length;
       document.getElementById('stat-lists').textContent = totalLists;

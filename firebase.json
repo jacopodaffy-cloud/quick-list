@@ -21,6 +21,7 @@
       "capacitor.config.ts",
       "twa-manifest.json",
       "package.json",
+      "google-services.json",
       "skills-lock.json"
     ],
     "rewrites": [
