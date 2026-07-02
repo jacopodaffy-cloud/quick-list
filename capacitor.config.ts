@@ -11,17 +11,10 @@ const config: CapacitorConfig = {
   // bundled code was ignored and updates never showed.)
   android: {
     backgroundColor: '#14161B'
-  },
-  plugins: {
-    // Native Google sign-in (lightweight — only Google Sign-In via play-services-auth,
-    // NO Firebase native SDK, so nothing Firebase initializes at app launch). We hand
-    // the returned idToken to the Firebase JS SDK the app already uses for Firestore.
-    GoogleAuth: {
-      scopes: ['profile', 'email'],
-      serverClientId: '491197590751-13eaa8v0e0478r59476r25kjj6ahm9vl.apps.googleusercontent.com',
-      forceCodeForRefreshToken: false
-    }
   }
+  // Native Google sign-in uses @capgo/capacitor-social-login (Credential Manager,
+  // the modern OS-level account sheet). It is configured at runtime from app.js
+  // via SocialLogin.initialize({ google: { webClientId } }) — nothing needed here.
 };
 
 export default config;

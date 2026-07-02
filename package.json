@@ -10,10 +10,11 @@
     "@capacitor/android": "^6.1.2",
     "@capacitor/app": "^6.0.2",
     "@capacitor/core": "^6.1.2",
-    "@codetrix-studio/capacitor-google-auth": "3.4.0-rc.4"
+    "@capgo/capacitor-social-login": "6.0.1"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.1.2",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "ws": "^8.18.0"
   }
 }

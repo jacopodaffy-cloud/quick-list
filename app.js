@@ -757,44 +757,45 @@ async function doGoogle() {
   const provider = new c.authm.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
-  // Native app: real native Google sign-in via the Capacitor GoogleAuth plugin
-  // (web popups/redirects can't run in the bundled WebView), then sign the Firebase
-  // JS SDK in with the returned idToken. Lazy — runs only on tap — so any Google
-  // misconfig surfaces as a message here and never blocks app launch.
-  const GA = window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function'
+  // Native app: Google sign-in through the OS-level Credential Manager sheet —
+  // the same account picker Instagram/YouTube use — via @capgo/capacitor-social-login.
+  // (The old @codetrix-studio plugin relied on Google's legacy GoogleSignIn API,
+  // which Google shut down in favour of Credential Manager — that's why sign-in
+  // failed on real phones.) Web popups/redirects can't run in the bundled WebView,
+  // so on the phone we get an idToken natively and hand it to the Firebase JS SDK
+  // the app already uses. Lazy — runs only on tap — so any misconfig surfaces as
+  // a message here and never blocks app launch.
+  const SL = window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function'
     && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins
-    && window.Capacitor.Plugins.GoogleAuth;
-  if (GA) {
-    // The Web OAuth client id (type 3). The native plugin exchanges the chosen
-    // Google account for an idToken we then hand to the Firebase JS SDK.
+    && window.Capacitor.Plugins.SocialLogin;
+  if (SL) {
+    // The Web OAuth client id (type 3): Credential Manager mints an idToken for
+    // this audience, which is exactly what Firebase verifies server-side.
     const WEB_CLIENT_ID = '491197590751-13eaa8v0e0478r59476r25kjj6ahm9vl.apps.googleusercontent.com';
-    // Initialise the plugin BEFORE signIn(). Calling signIn() on an uninitialised
-    // native client could throw at the Java layer (which JS can't catch) and take
-    // the whole app down — the "tapping Google exits QuickList" bug. initialize()
-    // is idempotent and safe to call on every tap; we swallow its result so a
-    // missing method on an older plugin build never blocks the real sign-in.
     try {
-      if (typeof GA.initialize === 'function') {
-        await GA.initialize({ clientId: WEB_CLIENT_ID, scopes: ['profile', 'email'], grantOfflineAccess: false });
+      if (!doGoogle._init) {
+        await SL.initialize({ google: { webClientId: WEB_CLIENT_ID, mode: 'online' } });
+        doGoogle._init = true;
       }
-      console.log('[QL] native Google: initialised, opening picker');
+      console.log('[QL] native Google: initialised, opening the account sheet');
     } catch (e) { console.warn('[QL] native Google initialize failed (continuing):', (e && e.message) || e); }
-    let gu;
+    let res;
     try {
-      gu = await GA.signIn();
+      res = await SL.login({ provider: 'google', options: {} });
     } catch (e) {
-      // A real, catchable failure (user cancelled, no Play Services, config error).
-      // Surface a message and keep the app open — never let it bubble.
-      console.warn('[QL] native Google signIn failed:', (e && (e.code || e.message)) || e);
-      const m = (e && (e.message || e.code) || '').toString();
-      if (/cancel|12501|popup_closed/i.test(m)) return;            // user backed out — no error UI
+      // A real, catchable failure (user closed the sheet, no Google account on the
+      // device, outdated Play Services). Surface a message and keep the app open.
+      const m = ((e && (e.message || e.code)) || '').toString();
+      console.warn('[QL] native Google login failed:', m);
+      if (/cancel|dismiss/i.test(m)) return;                       // user backed out — no error UI
+      if (/no credential|no.*account/i.test(m)) throw new Error('No Google account on this phone yet — add one in Android Settings, or sign in with email below.');
       throw new Error('Google sign-in didn’t complete on this device. You can sign in with email instead.');
     }
-    const idToken = gu && gu.authentication && gu.authentication.idToken;
+    const idToken = res && res.result && res.result.idToken;
     if (!idToken) throw new Error('Google sign-in did not complete. Please try again.');
     const cred = c.authm.GoogleAuthProvider.credential(idToken);
-    const res = await c.authm.signInWithCredential(c.auth, cred);
-    const u = res.user;
+    const fbres = await c.authm.signInWithCredential(c.auth, cred);
+    const u = fbres.user;
     await activateSession({ uid: u.uid, email: u.email || '', username: u.displayName || (u.email || 'You').split('@')[0], provider: 'cloud' }, { adoptGuest: true });
     console.log('[QL] native Google: signed in', u.uid);
     return;
@@ -902,7 +903,11 @@ function openAccountSheet() {
     <button class="btn-google" data-auth="google">${GOOGLE_G}<span>Continue with Google</span></button><div class="auth-or"><span>or</span></div>
     <form id="auth-form" class="auth-form" autocomplete="on">
       ${signup ? `<input class="field" name="username" placeholder="Username" autocomplete="username" required>` : ''}
-      <input class="field" name="id" type="${signup ? 'email' : 'text'}" placeholder="${signup ? 'Email' : (CLOUD_ENABLED ? 'Email' : 'Email or username')}" autocomplete="${signup ? 'email' : 'username'}" ${signup && CLOUD_ENABLED ? 'required' : ''} ${signup ? 'inputmode="email"' : ''}>
+      <!-- NEVER name this field "id": on a <form>, named controls shadow the
+           form's own .id property, so e.target.id stopped matching "auth-form"
+           in the submit handler — the form then submitted natively (page reload,
+           credentials leaked into the URL) and login silently broke. -->
+      <input class="field" name="login" type="${signup ? 'email' : 'text'}" placeholder="${signup ? 'Email' : (CLOUD_ENABLED ? 'Email' : 'Email or username')}" autocomplete="${signup ? 'email' : 'username'}" ${signup && CLOUD_ENABLED ? 'required' : ''} ${signup ? 'inputmode="email"' : ''}>
       <input class="field" name="password" type="password" placeholder="${signup ? 'Password (8+ characters)' : 'Password'}" autocomplete="${signup ? 'new-password' : 'current-password'}" required>
       <p class="auth-error" id="auth-error" role="alert"></p>
       <button class="btn btn-c btn-block" type="submit" id="auth-submit">${signup ? 'Create account' : 'Sign in'}</button>
@@ -1125,8 +1130,8 @@ async function handleAuthSubmit(form) {
   const fd = new FormData(form);
   const mode = authMode;
   const f = mode === 'signup'
-    ? { username: (fd.get('username') || '').trim(), email: (fd.get('id') || '').trim(), password: fd.get('password') || '' }
-    : { id: (fd.get('id') || '').trim(), password: fd.get('password') || '' };
+    ? { username: (fd.get('username') || '').trim(), email: (fd.get('login') || '').trim(), password: fd.get('password') || '' }
+    : { id: (fd.get('login') || '').trim(), password: fd.get('password') || '' };
   if (mode === 'signup') { const err = validateSignup(f); if (err) { setAuthError(err); return; } }
   if (mode === 'signin') { const blk = rlBlocked(); if (blk) { setAuthError(rlMessage(blk)); return; } }
   setAuthError(''); setAuthBusy(true);
@@ -1560,6 +1565,7 @@ function onPointerDown(e) {
 function startDrag(row, startY, pointerId) {
   if (!row) return;
   const container = $('#items');
+  const scroller = $('#page-detail');
   const rows = [...container.querySelectorAll('.item')];
   const rects = rows.map(r => r.getBoundingClientRect());
   const idx = rows.indexOf(row);
@@ -1568,7 +1574,8 @@ function startDrag(row, startY, pointerId) {
   const h = (rects[idx] && rects[idx].height) || 56;
   const gap = rects[idx + 1] ? rects[idx + 1].top - rects[idx].bottom
             : rects[idx - 1] ? rects[idx].top - rects[idx - 1].bottom : 9;
-  drag = { row, rows, rects, container, h, gap, startY, index: idx, current: idx };
+  drag = { row, rows, rects, container, scroller, h, gap, startY, index: idx, current: idx,
+           startScroll: scroller ? scroller.scrollTop : 0, lastY: startY, sv: 0, raf: 0 };
   row.classList.add('dragging');
   rows.forEach(r => { if (r !== row) r.classList.add('shift'); });
   container.style.touchAction = 'none';
@@ -1578,15 +1585,19 @@ function startDrag(row, startY, pointerId) {
   window.addEventListener('pointerup', onDragEnd);
   window.addEventListener('pointercancel', onDragEnd);
 }
-function onDragMove(e) {
+/* One layout pass: position the dragged row under the finger and shift the
+   others. All positions use the rects captured at drag start, compensated by
+   how far the page has auto-scrolled since (sd) — so the math stays correct
+   while the list scrolls under the finger. */
+function dragUpdate() {
   if (!drag) return;
-  e.preventDefault();
-  const dy = e.clientY - drag.startY;
-  drag.row.style.transform = `translateY(${dy}px) scale(1.02)`;
+  const sd = drag.scroller ? drag.scroller.scrollTop - drag.startScroll : 0;
+  const y = drag.lastY + sd;                     // finger position in drag-start coordinates
+  drag.row.style.transform = `translateY(${y - drag.startY}px) scale(1.02)`;
   let target = 0;
   for (let i = 0; i < drag.rects.length; i++) {
     const mid = drag.rects[i].top + drag.rects[i].height / 2;
-    if (e.clientY > mid) target = i + (i >= drag.index ? 1 : 0); else { target = i; break; }
+    if (y > mid) target = i + (i >= drag.index ? 1 : 0); else { target = i; break; }
   }
   target = clamp(target > drag.index ? target - 1 : target, 0, drag.rows.length - 1);
   if (target !== drag.current) {
@@ -1601,11 +1612,44 @@ function onDragMove(e) {
     });
   }
 }
+/* Auto-scroll while dragging near the top/bottom edge — without this, on a
+   phone an item can never travel further than one screen. Speed ramps up the
+   closer the finger gets to the edge; the rAF loop keeps scrolling while the
+   finger rests in the zone (pointermove stops firing when the finger is still). */
+function dragAutoScroll(clientY) {
+  const sc = drag && drag.scroller; if (!sc) return;
+  const r = sc.getBoundingClientRect();
+  const topZ = r.top + 100, botZ = r.bottom - 150, MAXV = 14;
+  let v = 0;
+  if (clientY < topZ) v = -Math.ceil(Math.min(1, (topZ - clientY) / 90) * MAXV);
+  else if (clientY > botZ) v = Math.ceil(Math.min(1, (clientY - botZ) / 90) * MAXV);
+  drag.sv = v;
+  if (v && !drag.raf) {
+    const step = () => {
+      if (!drag || !drag.sv) { if (drag) drag.raf = 0; return; }
+      const s = drag.scroller;
+      const next = clamp(s.scrollTop + drag.sv, 0, s.scrollHeight - s.clientHeight);
+      if (next === s.scrollTop) { drag.raf = 0; drag.sv = 0; return; }   // reached an end
+      s.scrollTop = next;
+      dragUpdate();
+      drag.raf = requestAnimationFrame(step);
+    };
+    drag.raf = requestAnimationFrame(step);
+  }
+}
+function onDragMove(e) {
+  if (!drag) return;
+  e.preventDefault();
+  drag.lastY = e.clientY;
+  dragAutoScroll(e.clientY);
+  dragUpdate();
+}
 function onDragEnd() {
   if (!drag) return;
   window.removeEventListener('pointermove', onDragMove);
   window.removeEventListener('pointerup', onDragEnd);
   window.removeEventListener('pointercancel', onDragEnd);
+  if (drag.raf) cancelAnimationFrame(drag.raf);
   const { index, current, container } = drag;
   drag.rows.forEach(r => { r.classList.remove('shift', 'dragging'); r.style.transform = ''; });
   container.style.touchAction = '';
@@ -1864,24 +1908,26 @@ function initScrollbar() {
   // Listen to both scroll containers (home + detail); only the active one is visible.
   ['#page-home', '#page-detail'].forEach(sel => { const el = $(sel); if (el) el.addEventListener('scroll', onDetailScroll, { passive: true }); });
   window.addEventListener('resize', () => updateScrollbar(), { passive: true });
-  bar.addEventListener('pointerdown', e => {
+  // Only the THUMB is interactive (the track has pointer-events:none in CSS).
+  // A finger scrolling near the right edge must always get native scrolling —
+  // grabbing is opt-in by pressing the thumb itself, like WhatsApp's handle.
+  const thumb = $('#scrollthumb');
+  thumb.addEventListener('pointerdown', e => {
     const sc = activeScroller(); if (!sc) return;
-    const thumb = $('#scrollthumb');
     const barRect = bar.getBoundingClientRect();
     const thumbRect = thumb.getBoundingClientRect();
     const trackH = bar.clientHeight, thumbH = thumbRect.height;
     const maxScroll = sc.scrollHeight - sc.clientHeight;
     if (maxScroll <= 0) return;
+    e.preventDefault();
     bar.classList.add('dragging');
-    try { bar.setPointerCapture(e.pointerId); } catch (_) { }
-    // Grab the thumb where you press; if you press the track outside it, centre on the press.
-    let grabOffset = (e.clientY >= thumbRect.top && e.clientY <= thumbRect.bottom) ? (e.clientY - thumbRect.top) : thumbH / 2;
+    try { thumb.setPointerCapture(e.pointerId); } catch (_) { }
+    const grabOffset = e.clientY - thumbRect.top;   // keep the grab point under the finger
     const apply = clientY => {
       const range = trackH - thumbH;
       const frac = range > 0 ? clamp((clientY - barRect.top - grabOffset) / range, 0, 1) : 0;
       sc.scrollTop = frac * maxScroll;
     };
-    apply(e.clientY);
     const move = me => apply(me.clientY);
     const end = () => {
       bar.classList.remove('dragging');
@@ -1960,9 +2006,13 @@ $('#achv-btn').addEventListener('click', () => { achvTab = 'badges'; openAchieve
 $('#settings-btn').addEventListener('click', openSettingsSheet);
 $('#avatar').addEventListener('click', () => { authMode = 'signin'; openAccountSheet(); });
 document.addEventListener('submit', e => {
-  if (e.target.id === 'auth-form') { e.preventDefault(); handleAuthSubmit(e.target); }
-  if (e.target.id === 'reset-form') { e.preventDefault(); handleResetSubmit(e.target); }
-  if (e.target.id === 'join-form') { e.preventDefault(); handleJoinSubmit(e.target); }
+  // getAttribute, NOT .id: a form control named "id" shadows the form's .id
+  // property (that's how the login form once slipped past this handler and
+  // submitted natively). The attribute lookup can't be shadowed.
+  const fid = e.target.getAttribute && e.target.getAttribute('id');
+  if (fid === 'auth-form') { e.preventDefault(); handleAuthSubmit(e.target); }
+  if (fid === 'reset-form') { e.preventDefault(); handleResetSubmit(e.target); }
+  if (fid === 'join-form') { e.preventDefault(); handleJoinSubmit(e.target); }
 });
 $('#detail-back').addEventListener('click', () => { try { document.activeElement && document.activeElement.blur(); } catch (e) { } navBack(); });
 $('#detail-copy').addEventListener('click', () => copyList(view.id));

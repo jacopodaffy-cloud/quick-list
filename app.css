@@ -581,10 +581,13 @@ body.fmt-on .fmt-bar { display: flex; }
   right: max(2px, calc(50vw - var(--shell) / 2 + 2px));
   top: calc(env(safe-area-inset-top, 0px) + 74px);   /* below the sticky header (detail) */
   bottom: calc(104px + env(safe-area-inset-bottom, 0px));   /* above the add bar (detail) */
-  width: 16px;            /* invisible touch zone — easy to grab */
+  width: 16px;
   z-index: 26;
   display: none;
-  touch-action: none;
+  /* The track itself must NEVER swallow touches: a thumb scrolling near the
+     right edge of the screen gets 100% native scrolling. Only the thumb below
+     is interactive (opt-in grab, like WhatsApp's scroll handle). */
+  pointer-events: none;
 }
 /* Show on both screens; home has no sticky header / add bar, so a taller track. */
 body.view-detail #scrollbar, body.view-home #scrollbar { display: block; }
@@ -594,16 +597,25 @@ body.view-home #scrollbar {
 }
 #scrollthumb {
   position: absolute;
-  right: 3px; top: 0;
-  width: 7px;
+  right: 0; top: 0;
+  width: 16px;             /* full-width hit zone — easy to grab with a finger */
   min-height: 44px;
-  border-radius: 99px;
-  background: color-mix(in srgb, var(--ink-3) 60%, transparent);
-  transition: width .12s var(--ease-out), background .15s, opacity .2s;
+  pointer-events: auto;    /* the one interactive part of the scrollbar */
+  touch-action: none;
+  transition: opacity .2s;
   will-change: transform;
 }
-#scrollbar.dragging #scrollthumb { width: 10px; background: var(--ink-2); }
-@media (hover: hover) { #scrollbar:hover #scrollthumb { width: 10px; background: var(--ink-2); } }
+#scrollthumb::after {      /* the visible pill, narrower than the hit zone */
+  content: "";
+  position: absolute;
+  right: 3px; top: 0; bottom: 0;
+  width: 7px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--ink-3) 60%, transparent);
+  transition: width .12s var(--ease-out), background .15s;
+}
+#scrollbar.dragging #scrollthumb::after { width: 10px; background: var(--ink-2); }
+@media (hover: hover) { #scrollbar:hover #scrollthumb::after { width: 10px; background: var(--ink-2); } }
 
 /* ============================================================ sheets */
 #backdrop { position: fixed; inset: 0; background: rgba(8, 10, 14, .5); opacity: 0; transition: opacity .22s; z-index: 50; }

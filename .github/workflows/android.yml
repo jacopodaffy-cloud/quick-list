@@ -50,33 +50,42 @@ jobs:
       - name: Sync web assets into the Android project
         run: npx cap sync android
 
-      - name: Configure native Google Sign-In (web client id)
+      - name: Patch MainActivity for native Google sign-in (SocialLogin callback)
         run: |
-          # The lightweight @codetrix-studio/capacitor-google-auth plugin reads the
-          # OAuth web client id from this string resource on Android.
-          STR=android/app/src/main/res/values/strings.xml
-          sed -i 's#</resources>#    <string name="server_client_id">491197590751-13eaa8v0e0478r59476r25kjj6ahm9vl.apps.googleusercontent.com</string>\n</resources>#' "$STR"
-          echo "=== strings.xml ===" ; cat "$STR"
+          # @capgo/capacitor-social-login needs the main activity to route Google's
+          # authorization result back to the plugin (its documented setup). Without
+          # this, the access-token consent flow could leave the login hanging.
+          MA=android/app/src/main/java/app/quicklist/twa/MainActivity.java
+          cat > "$MA" <<'EOF'
+          package app.quicklist.twa;
 
-      - name: Wire google-services (real OAuth config compiled into the app)
-        run: |
-          # Put the real google-services.json where the Android build expects it.
-          # Capacitor's app/build.gradle already applies the google-services plugin
-          # conditionally WHEN this file exists, so the Android OAuth client + web
-          # client are compiled in the standard, reliable way (no more "Google tap
-          # exits the app"). The plugin only reads config — it pulls in no Firebase
-          # native SDK, so nothing extra initialises at launch.
-          cp google-services.json android/app/google-services.json
-          PROJ=android/build.gradle
-          if ! grep -q "com.google.gms:google-services" "$PROJ"; then
-            sed -i "s#classpath 'com.android.tools.build:gradle.*#&\n        classpath 'com.google.gms:google-services:4.4.2'#" "$PROJ"
-          fi
-          APP=android/app/build.gradle
-          if ! grep -q "com.google.gms.google-services" "$APP"; then
-            echo "apply plugin: 'com.google.gms.google-services'" >> "$APP"
-          fi
-          echo "=== project build.gradle buildscript classpaths ===" ; grep -n "classpath" "$PROJ" || true
-          echo "=== app build.gradle google-services ===" ; grep -n "google-services" "$APP" || true
+          import android.content.Intent;
+          import com.getcapacitor.BridgeActivity;
+          import com.getcapacitor.Plugin;
+          import com.getcapacitor.PluginHandle;
+          import ee.forgr.capacitor.social.login.GoogleProvider;
+          import ee.forgr.capacitor.social.login.ModifiedMainActivityForSocialLoginPlugin;
+          import ee.forgr.capacitor.social.login.SocialLoginPlugin;
+
+          public class MainActivity extends BridgeActivity implements ModifiedMainActivityForSocialLoginPlugin {
+
+            @Override
+            public void onActivityResult(int requestCode, int resultCode, Intent data) {
+              super.onActivityResult(requestCode, resultCode, data);
+              if (requestCode >= GoogleProvider.REQUEST_AUTHORIZE_GOOGLE_MIN && requestCode < GoogleProvider.REQUEST_AUTHORIZE_GOOGLE_MAX) {
+                PluginHandle pluginHandle = getBridge().getPlugin("SocialLogin");
+                if (pluginHandle == null) return;
+                Plugin plugin = pluginHandle.getInstance();
+                if (!(plugin instanceof SocialLoginPlugin)) return;
+                ((SocialLoginPlugin) plugin).handleGoogleLoginIntent(requestCode, data);
+              }
+            }
+
+            @Override
+            public void IHaveModifiedTheMainActivityForTheUseWithSocialLoginPlugin() {}
+          }
+          EOF
+          echo "=== MainActivity.java ===" ; cat "$MA"
 
       - name: Set custom app icon
         run: |
@@ -86,7 +95,7 @@ jobs:
       - name: Override variables.gradle and version code
         run: |
           cp variables.gradle android/variables.gradle
-          sed -i 's/versionCode 1/versionCode 40/g' android/app/build.gradle
+          sed -i 's/versionCode 1/versionCode 41/g' android/app/build.gradle
           echo "=== variables.gradle ==="
           cat android/variables.gradle
           echo "=== versionCode ==="
@@ -114,12 +123,19 @@ jobs:
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
             -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
-      - name: Smoke test — boot an emulator and verify the app actually opens
+      - name: Build debug APK (for the emulator login-tap test)
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Smoke test — launch check + drive the Google login tap on an emulator
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 29
-          target: default
+          # google_apis image: has Play services, so the Credential Manager code
+          # path used by native Google sign-in actually executes.
+          api-level: 34
+          target: google_apis
           arch: x86_64
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
