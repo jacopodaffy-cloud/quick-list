@@ -7,23 +7,31 @@ const WebSocket = require('ws');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-function getJSON(path) {
+function getRaw(path) {
   return new Promise((resolve, reject) => {
     http.get({ host: '127.0.0.1', port: 9222, path }, res => {
       let b = '';
       res.on('data', d => (b += d));
-      res.on('end', () => { try { resolve(JSON.parse(b)); } catch (e) { reject(e); } });
+      res.on('end', () => resolve(b));
     }).on('error', reject);
   });
 }
 
 async function main() {
-  let pages = [];
-  for (let i = 0; i < 10 && !pages.length; i++) {
-    try { pages = (await getJSON('/json/list')).filter(p => p.type === 'page'); } catch (e) { }
-    if (!pages.length) await sleep(2000);
+  let pages = [], lastErr = '', lastBody = '';
+  for (let i = 0; i < 20 && !pages.length; i++) {
+    try {
+      lastBody = await getRaw('/json/list');
+      const all = JSON.parse(lastBody);
+      pages = all.filter(p => p.type === 'page');
+      if (!pages.length && all.length) pages = all;   // WebView sometimes tags pages differently
+    } catch (e) { lastErr = e.message; }
+    if (!pages.length) await sleep(3000);
   }
-  if (!pages.length) { console.log('LOGINTAP_RESULT: no CDP page found (WebView not debuggable?)'); return; }
+  if (!pages.length) {
+    console.log('LOGINTAP_RESULT: no CDP page found. last error:', lastErr, 'last body:', lastBody.slice(0, 400));
+    return;
+  }
 
   const ws = new WebSocket(pages[0].webSocketDebuggerUrl, { perMessageDeflate: false });
   let id = 0;

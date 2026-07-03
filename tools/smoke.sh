@@ -5,10 +5,22 @@
 #      account sheet, tap "Continue with Google" — and verify the app survives
 #      the tap and surfaces a message instead of dying (the historic bug).
 # Run by the CI emulator step; the emulator-runner action waits for full boot.
+# The google_apis image is heavy on the 2-core runner: the first launch can take
+# a minute under CPU pressure, so every check retries instead of sampling once.
 set +e
 RAPK="android/app/build/outputs/apk/release/app-release.apk"
 DAPK="android/app/build/outputs/apk/debug/app-debug.apk"
 PKG="app.quicklist.twa"
+
+alive() { adb shell pidof "$PKG" >/dev/null 2>&1; }
+
+wait_alive() {   # up to N x 10s
+  for i in $(seq 1 "$1"); do
+    alive && return 0
+    sleep 10
+  done
+  alive
+}
 
 echo "===== [1/2] RELEASE: install ====="
 for i in 1 2 3 4 5; do
@@ -19,14 +31,13 @@ done
 
 adb logcat -c
 echo "===== RELEASE: launch ====="
-adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1
-sleep 15
+adb shell am start -W -n "$PKG/.MainActivity" || adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1
 
-echo "===== RELEASE: process check ====="
-if adb shell pidof "$PKG" >/dev/null 2>&1; then
+echo "===== RELEASE: process check (retries: emulator is slow on first launch) ====="
+if wait_alive 9; then
   echo "SMOKE_RESULT: RELEASE PROCESS ALIVE — app stayed open"
 else
-  echo "SMOKE_RESULT: RELEASE NOT RUNNING — likely crashed on launch"
+  echo "SMOKE_RESULT: RELEASE NOT RUNNING after 90s — check the crash scan below"
 fi
 
 echo "===== RELEASE: crash scan ====="
@@ -45,15 +56,27 @@ for i in 1 2 3; do
   sleep 8
 done
 adb logcat -c
-adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1
-sleep 12
+adb shell am start -W -n "$PKG/.MainActivity" || adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1
 
-PID=$(adb shell pidof "$PKG" | tr -d '[:space:]')
-if [ -z "$PID" ]; then
+if ! wait_alive 6; then
   echo "SMOKE_RESULT: DEBUG apk did not start — cannot run the login tap test"
   exit 0
 fi
-adb forward tcp:9222 "localabstract:webview_devtools_remote_${PID}"
+
+# Discover the WebView devtools socket by NAME from the abstract socket table —
+# composing it from pidof is fragile (multiple pids, renderer processes).
+SOCKET=""
+for i in $(seq 1 18); do
+  SOCKET=$(adb shell cat /proc/net/unix 2>/dev/null | grep -o "@webview_devtools_remote_[0-9]*" | head -1 | tr -d '@[:space:]')
+  [ -n "$SOCKET" ] && break
+  sleep 5
+done
+if [ -z "$SOCKET" ]; then
+  echo "SMOKE_RESULT: no WebView devtools socket appeared — cannot run the login tap test"
+  exit 0
+fi
+echo "devtools socket: $SOCKET"
+adb forward tcp:9222 "localabstract:${SOCKET}"
 node tools/logintap.js
 
 echo "===== LOGIN TAP: crash scan ====="
@@ -64,7 +87,7 @@ if grep -q "FATAL EXCEPTION" lc2.txt; then
 else
   echo "SMOKE_RESULT: no FATAL EXCEPTION during Google tap (good)"
 fi
-if adb shell pidof "$PKG" >/dev/null 2>&1; then
+if alive; then
   echo "SMOKE_RESULT: APP STILL ALIVE after Google tap (good)"
 else
   echo "SMOKE_RESULT: APP DIED after Google tap — the 'exits the app' bug is back"
