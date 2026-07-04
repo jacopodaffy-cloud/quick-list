@@ -24,5 +24,16 @@ window.QUICKLIST_CONFIG = {
     messagingSenderId: "491197590751",
     appId: "1:491197590751:web:c5f047971bbb6a42104d6a",
     measurementId: "G-P8K9NESGCR"
-  }
+  },
+
+  /* App Check (optional; also PUBLIC — it's a reCAPTCHA v3 SITE key, the secret
+     stays in Google's console). To activate:
+       1. Create a reCAPTCHA v3 key at https://www.google.com/recaptcha/admin/create
+          with domains: jacopodaffy-cloud.github.io  and  localhost
+       2. Firebase console → App Check → register the web app with that key
+          (paste the SECRET key there), leave enforcement OFF at first
+       3. Paste the SITE key here and redeploy
+       4. After the App Check console shows "verified" traffic, turn enforcement
+          ON for Firestore + Auth. Never enforce before step 3 is live. */
+  appCheckSiteKey: null
 };

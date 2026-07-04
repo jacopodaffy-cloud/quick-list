@@ -57,7 +57,9 @@ const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /* ---- input sanitisation: trim, strip control chars, cap length ---- */
 const MAX = { title: 80, item: 200, items: 500, lists: 500, user: 40, email: 120, pw: 200, img: 900000 };
-const isImgData = s => typeof s === 'string' && /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(s) && s.length <= MAX.img;
+// Anchored to the full string: the base64 charset can't contain "<>'& so a
+// crafted value from a shared-list peer can't break out of the src attribute.
+const isImgData = s => typeof s === 'string' && /^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(s) && s.length <= MAX.img;
 const cleanText = (s, max) => String(s == null ? '' : s).replace(new RegExp('[\\u0000-\\u001F\\u007F]','g'), '').replace(/\s+/g, ' ').trim().slice(0, max || 200);
 
 function showFatal(err) {
@@ -493,6 +495,17 @@ async function ensureCloud() {
     import(FB + 'firebase-app.js'), import(FB + 'firebase-auth.js'), import(FB + 'firebase-firestore.js'),
   ]);
   const fbApp = app.initializeApp(CFG.firebase);
+  // App Check (reCAPTCHA v3): proves requests come from the real app, so third-
+  // party scripts can't burn the project quota with the public apiKey. Optional —
+  // activates only when a site key is present in config.js, and any failure is
+  // swallowed so cloud sync keeps working (enforcement is flipped in the console
+  // only after the console metrics show verified traffic).
+  if (CFG.appCheckSiteKey) {
+    try {
+      const ac = await import(FB + 'firebase-app-check.js');
+      ac.initializeAppCheck(fbApp, { provider: new ac.ReCaptchaV3Provider(CFG.appCheckSiteKey), isTokenAutoRefreshEnabled: true });
+    } catch (e) { console.warn('[QL] App Check init failed (continuing without it):', (e && e.message) || e); }
+  }
   cloud = { authm, fs, auth: authm.getAuth(fbApp), db: fs.getFirestore(fbApp) };
   // Handle redirect result after Google sign-in on mobile
   try {
@@ -677,7 +690,18 @@ async function fetchLeaderboard(max = 100) {
   const c = await ensureCloud();
   const q = c.fs.query(c.fs.collection(c.db, 'leaderboard'), c.fs.orderBy('points', 'desc'), c.fs.limit(max));
   const snap = await c.fs.getDocs(q);
-  const rows = []; snap.forEach(d => { const v = d.data(); if (v && Number.isFinite(v.points)) rows.push(v); });
+  // Coerce every field: leaderboard docs are written by OTHER users' clients,
+  // so nothing here may reach the DOM as a non-escaped/non-numeric value.
+  const rows = []; snap.forEach(d => {
+    const v = d.data(); if (!v || !Number.isFinite(v.points)) return;
+    rows.push({
+      uid: typeof v.uid === 'string' ? v.uid : d.id,
+      name: cleanText(v.name, MAX.user) || 'Anonymous',
+      points: v.points,
+      badges: Number(v.badges) || 0,
+      completed: Number(v.completed) || 0,
+    });
+  });
   return rows;
 }
 function editingNow() {
@@ -1168,7 +1192,8 @@ function humanAuthError(e) {
   const map = {
     'auth/email-already-in-use': 'That email already has an account — try signing in.',
     'auth/invalid-email': 'That email address looks wrong.',
-    'auth/weak-password': 'Password needs at least 6 characters.',
+    'auth/weak-password': 'Password needs at least 8 characters.',
+    'auth/password-does-not-meet-requirements': 'Password needs at least 8 characters.',
     'auth/wrong-password': 'Wrong password — try again.',
     'auth/user-not-found': 'No account with that email.',
     'auth/invalid-credential': 'Email or password is incorrect.',
@@ -1324,7 +1349,7 @@ function ItemRow(it) {
       <span class="handle" data-handle aria-label="Drag to reorder">${I.grip}</span>
       <button class="check" data-check="${it.id}" role="checkbox" aria-checked="${it.done}" aria-label="${esc(stripFmt(it.text))}">${I.tick}</button>
       <span class="item-text ${it.text ? '' : (it.img ? 'photo-only' : '')}" data-edit="${it.id}"><span class="tx">${fmtText(it.text)}</span></span>
-      ${it.img ? `<button class="item-img" data-img="${it.id}" aria-label="View photo"><img src="${it.img}" alt="" loading="lazy"></button>` : ''}
+      ${it.img ? `<button class="item-img" data-img="${it.id}" aria-label="View photo"><img src="${esc(it.img)}" alt="" loading="lazy"></button>` : ''}
       <button class="item-del" data-del="${it.id}" aria-label="Delete item">${I.trash}</button>
       ${it.qty > 1 ? `<button class="qty" data-qty="${it.id}" aria-label="Quantity ${it.qty}, tap to add one">×${it.qty}</button>` : ''}
     </div>
@@ -1498,7 +1523,7 @@ function openImage(itemId) {
   const l = getList(view.id); const it = l && l.items.find(i => i.id === itemId);
   if (!it || !it.img) return;
   const lb = document.createElement('div'); lb.className = 'lightbox';
-  lb.innerHTML = `<img src="${it.img}" alt="Item photo">
+  lb.innerHTML = `<img src="${esc(it.img)}" alt="Item photo">
     <div class="lb-actions">
       <button class="btn btn-soft" data-lb="replace" data-id="${itemId}">${I.camera}<span>Replace</span></button>
       <button class="btn btn-danger" data-lb="remove" data-id="${itemId}">${I.trash}<span>Remove</span></button>
