@@ -18,15 +18,31 @@
    ============================================================ */
 
 /* ====================== 0. Version & Force Update ====================== */
-const APP_VERSION_CODE = 2;
+// Keep in lockstep with versionCode in .github/workflows/android.yml — bump BOTH
+// every release (see PRD "Bump every release"), or installed apps stop noticing
+// new versions.
+const APP_VERSION_CODE = 45;
+
+// Inside the APK a relative fetch would read the version.json BUNDLED at build
+// time (frozen forever) — the check must always ask the live site. On the web
+// the relative URL is the live site already.
+const VERSION_URL = (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform())
+  ? 'https://jacopodaffy-cloud.github.io/quick-list/version.json'
+  : 'version.json';
 
 async function checkForceUpdate() {
   try {
-    const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    const res = await fetch(VERSION_URL + '?t=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
-    if (data.minVersionCode && APP_VERSION_CODE < data.minVersionCode) {
-      showUpdateWall(data.playStoreUrl || 'https://play.google.com/store/apps/details?id=app.quicklist.twa');
+    const url = data.playStoreUrl || 'https://play.google.com/store/apps/details?id=app.quicklist.twa';
+    // Below the supported floor: block until updated (old versions have broken
+    // login/sync and must not keep running).
+    if (data.minVersionCode && APP_VERSION_CODE < data.minVersionCode) { showUpdateWall(url); return; }
+    // Newer version on the Play Store: gentle nudge, only in the installed app
+    // (the web app self-updates through the service worker).
+    if (window.Capacitor && data.latestVersionCode && APP_VERSION_CODE < data.latestVersionCode) {
+      toast('A new version of QuickList is available', 'Update', () => window.open(url, '_blank'));
     }
   } catch (e) { /* offline — don't block the user */ }
 }

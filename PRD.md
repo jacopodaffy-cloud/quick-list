@@ -104,7 +104,7 @@ This intentionally lets the admin read list **content**, which the previous mode
 ## 5. Release / build
 
 - One push to `main` deploys the web app (GitHub Pages) **and** builds a signed **AAB + APK** (Actions → run artifacts).
-- **Bump every release**: `versionCode` (→ **45**), asset `?v=` (→ 45), sw cache (→ `quicklist-v46`). Play rejects a re‑used `versionCode`.
+- **Bump every release**: `versionCode` in android.yml (→ **45**), `APP_VERSION_CODE` in app.js (→ **45**), `latestVersionCode` in version.json (→ **45**), asset `?v=` (→ 45), sw cache (→ `quicklist-v46`). Play rejects a re‑used `versionCode`; installed apps read version.json from the live site to offer/force updates (raise `minVersionCode` only when older clients must stop working).
 - Keystore is injected from repo secrets (never committed). Emulator smoke test gates "does it open".
 
 ### Out of scope today
