@@ -21,7 +21,7 @@
 // Keep in lockstep with versionCode in .github/workflows/android.yml — bump BOTH
 // every release (see PRD "Bump every release"), or installed apps stop noticing
 // new versions.
-const APP_VERSION_CODE = 47;
+const APP_VERSION_CODE = 48;
 
 // Inside the APK a relative fetch would read the version.json BUNDLED at build
 // time (frozen forever) — the check must always ask the live site. On the web
