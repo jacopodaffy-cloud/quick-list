@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
 
@@ -21,7 +21,7 @@ jobs:
         run: npm install
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -108,7 +108,7 @@ jobs:
       - name: Override variables.gradle and version code
         run: |
           cp variables.gradle android/variables.gradle
-          sed -i 's/versionCode 1/versionCode 46/g' android/app/build.gradle
+          sed -i 's/versionCode 1/versionCode 47/g' android/app/build.gradle
           echo "=== variables.gradle ==="
           cat android/variables.gradle
           echo "=== versionCode ==="
@@ -141,6 +141,13 @@ jobs:
           cd android
           ./gradlew assembleDebug --no-daemon
 
+      # Without KVM the emulator boots in slow software mode and often times out.
+      - name: Enable KVM (hardware acceleration for the emulator)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Smoke test — launch check + drive the Google login tap on an emulator
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
@@ -153,19 +160,20 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: false
+          emulator-boot-timeout: 900
           # Single command — the action runs each script line separately, so multi-line
           # shell (for/if) must live in a file that bash runs as one unit.
           script: bash tools/smoke.sh
 
       - name: Upload AAB (Play Store)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: QuickList-release-aab
           path: android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
 
       - name: Upload APK (sideload)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: QuickList-release-apk
           path: android/app/build/outputs/apk/release/app-release.apk
