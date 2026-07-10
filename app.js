@@ -21,7 +21,7 @@
 // Keep in lockstep with versionCode in .github/workflows/android.yml — bump BOTH
 // every release (see PRD "Bump every release"), or installed apps stop noticing
 // new versions.
-const APP_VERSION_CODE = 49;
+const APP_VERSION_CODE = 50;
 
 // The public home of the web app — used for the update wall and for share links
 // (inside the APK location.origin is https://localhost, never usable in a link).
@@ -498,7 +498,7 @@ async function localSignUp({ username, email, password }) {
   username = cleanText(username, MAX.user); email = cleanText(email, MAX.email);
   password = String(password || '');
   if (username.length < 2) throw new Error('Pick a username (at least 2 characters)');
-  if (password.length < 6) throw new Error('Password needs at least 6 characters');
+  if (password.length < 8) throw new Error('Password needs at least 8 characters');   // same floor as cloud accounts
   if (password.length > MAX.pw) throw new Error('Password is too long');
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('That email address looks wrong');
   const accts = readAccounts();
@@ -581,7 +581,10 @@ async function cloudPush() {
 const sharedUnsubs = {};        // code -> firestore unsubscribe
 const sharedPushTimers = {};    // code -> debounce timer
 const SHARE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no ambiguous 0/O/1/I/L
-function genCode(n = 6) { let s = ''; const a = crypto.getRandomValues(new Uint8Array(n)); for (let i = 0; i < n; i++) s += SHARE_ALPHABET[a[i] % SHARE_ALPHABET.length]; return s; }
+// 8 chars since v50 (~1.1e12 combinations vs ~1.1e9 at 6) — the code is the only
+// key to a shared list, so entropy is the defence. Existing 6-char codes keep
+// working: joins accept 4–10 chars.
+function genCode(n = 8) { let s = ''; const a = crypto.getRandomValues(new Uint8Array(n)); for (let i = 0; i < n; i++) s += SHARE_ALPHABET[a[i] % SHARE_ALPHABET.length]; return s; }
 const cleanCode = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
 
 /* Ensure a Firebase auth token (the account, or an invisible anonymous one) so
@@ -664,9 +667,14 @@ async function joinByCode(raw) {
   if (!CLOUD_ENABLED) throw new Error('Cloud sharing is not set up yet');
   const existing = state.lists.find(x => x.code === code);
   if (existing) { subscribeShared(existing); return existing; }
+  // Brute-force guard: wrong codes count against a sliding window; a correct
+  // join clears it. Setup/network errors below do NOT count.
+  const blk = joinThrottle.blocked();
+  if (blk) throw new Error(`Too many wrong codes. Try again in ${throttleMins(blk)}.`);
   const c = await ensureAuthToken();
   const snap = await c.fs.getDoc(c.fs.doc(c.db, 'shared', code));
-  if (!snap.exists()) throw new Error('No list found with that code');
+  if (!snap.exists()) { joinThrottle.recordFail(); throw new Error('No list found with that code'); }
+  joinThrottle.reset();
   const rl = normRemoteList(snap.data());
   const l = mkList(rl ? rl.color : undefined);
   l.title = rl ? rl.title : ''; l.items = rl ? rl.items : []; l.code = code; l.shared = true;
@@ -906,23 +914,29 @@ async function doEmailAuth(mode, f) {
   }
 }
 
-/* ---- login rate limiting: max 5 failed attempts per 50 minutes ----
-   Client-side throttle (Firebase Auth also rate-limits server-side). */
-const RL_KEY = 'quicklist.rl', RL_MAX = 5, RL_WINDOW = 50 * 60 * 1000;
-function rlFails() {
-  let f; try { f = JSON.parse(localStorage.getItem(RL_KEY)) || []; } catch (e) { f = []; }
-  const now = Date.now(); f = (Array.isArray(f) ? f : []).filter(t => now - t < RL_WINDOW);
-  try { localStorage.setItem(RL_KEY, JSON.stringify(f)); } catch (e) { }
-  return f;
+/* ---- failure throttles (sliding window per localStorage key) ----
+   Client-side brute-force protection: sign-in (Firebase Auth also rate-limits
+   server-side) and shared-list join codes (guessing codes = trying keys). */
+function mkThrottle(key, max, windowMs) {
+  const fails = () => {
+    let f; try { f = JSON.parse(localStorage.getItem(key)) || []; } catch (e) { f = []; }
+    const now = Date.now(); f = (Array.isArray(f) ? f : []).filter(t => now - t < windowMs);
+    try { localStorage.setItem(key, JSON.stringify(f)); } catch (e) { }
+    return f;
+  };
+  return {
+    blocked() { const f = fails(); return f.length < max ? 0 : Math.max(0, windowMs - (Date.now() - f[0])); },  // ms until the oldest attempt expires
+    recordFail() { const f = fails(); f.push(Date.now()); try { localStorage.setItem(key, JSON.stringify(f)); } catch (e) { } },
+    reset() { try { localStorage.removeItem(key); } catch (e) { } },
+  };
 }
-function rlBlocked() {
-  const f = rlFails();
-  if (f.length < RL_MAX) return 0;
-  return Math.max(0, RL_WINDOW - (Date.now() - f[0]));   // ms until the oldest attempt expires
-}
-function rlRecordFail() { const f = rlFails(); f.push(Date.now()); try { localStorage.setItem(RL_KEY, JSON.stringify(f)); } catch (e) { } }
-function rlReset() { try { localStorage.removeItem(RL_KEY); } catch (e) { } }
-function rlMessage(ms) { const m = Math.ceil(ms / 60000); return `Too many sign-in attempts. Try again in ${m} minute${m === 1 ? '' : 's'}.`; }
+const signinThrottle = mkThrottle('quicklist.rl', 5, 50 * 60 * 1000);      // 5 fails / 50 min
+const joinThrottle = mkThrottle('quicklist.rljoin', 8, 10 * 60 * 1000);   // 8 wrong codes / 10 min
+const rlBlocked = () => signinThrottle.blocked();
+const rlRecordFail = () => signinThrottle.recordFail();
+const rlReset = () => signinThrottle.reset();
+const throttleMins = ms => { const m = Math.ceil(ms / 60000); return `${m} minute${m === 1 ? '' : 's'}`; };
+const rlMessage = ms => `Too many sign-in attempts. Try again in ${throttleMins(ms)}.`;
 
 /* ---- account deletion (right to be forgotten) ---- */
 async function deleteAccount() {
