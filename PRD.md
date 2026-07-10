@@ -4,7 +4,7 @@ Product: **QuickList** — premium, mobile‑first list app (each list is a colo
 
 Firebase project: `qwicklist-d8ee6` · Android app id: `app.quicklist.twa` · Repo: `github.com/jacopodaffy-cloud/quick-list` (branch `main` → GitHub Pages + Android CI).
 
-This release: **assets `?v=50`, sw cache `quicklist-v51`, Android `versionCode 50`.**
+This release: **assets `?v=51`, sw cache `quicklist-v52`, Android `versionCode 51`.**
 
 ---
 
@@ -104,7 +104,7 @@ This intentionally lets the admin read list **content**, which the previous mode
 ## 5. Release / build
 
 - One push to `main` deploys the web app (GitHub Pages) **and** builds a signed **AAB + APK** (Actions → run artifacts).
-- **Bump every release**: `versionCode` in android.yml (→ **50**), `APP_VERSION_CODE` in app.js (→ **50**), `latestVersionCode` in version.json (→ **50**), asset `?v=` (→ 50), sw cache (→ `quicklist-v51`). Play rejects a re‑used `versionCode`; installed apps read version.json from the live site to offer/force updates (raise `minVersionCode` only when older clients must stop working).
+- **Bump every release**: `versionCode` in android.yml (→ **51**), `APP_VERSION_CODE` in app.js (→ **51**), `latestVersionCode` in version.json (→ **51**), asset `?v=` (→ 51), sw cache (→ `quicklist-v52`). Play rejects a re‑used `versionCode`; installed apps read version.json from the live site to offer/force updates (raise `minVersionCode` only when older clients must stop working).
 - Keystore is injected from repo secrets (never committed). Emulator smoke test gates "does it open".
 
 ### Out of scope today

@@ -21,7 +21,7 @@
 // Keep in lockstep with versionCode in .github/workflows/android.yml — bump BOTH
 // every release (see PRD "Bump every release"), or installed apps stop noticing
 // new versions.
-const APP_VERSION_CODE = 50;
+const APP_VERSION_CODE = 51;
 
 // The public home of the web app — used for the update wall and for share links
 // (inside the APK location.origin is https://localhost, never usable in a link).
@@ -508,12 +508,21 @@ async function localSignUp({ username, email, password }) {
   accts[u.uid] = u; writeAccounts(accts);
   return { uid: u.uid, username, email, provider: 'local' };
 }
+// One message for every sign-in failure: saying "no account found" vs "wrong
+// password" lets anyone with the device confirm which usernames/emails have
+// accounts (enumeration).
+const AUTH_FAIL_MSG = 'Wrong username/email or password — try again.';
 async function localSignIn({ id, password }) {
   const a = Object.values(readAccounts()).find(x => matchUser(x, id));
-  if (!a) throw new Error('No account found with that username or email');
+  if (!a) {
+    // Burn the same PBKDF2 work as a real check so "account exists" can't be
+    // read from how fast the error comes back (timing side-channel).
+    await pbkdf2(password || '', '00000000000000000000000000000000', PBKDF2_ITER);
+    throw new Error(AUTH_FAIL_MSG);
+  }
   const iter = Number.isInteger(a.iter) ? a.iter : PBKDF2_ITER_LEGACY;
   const { hash } = await pbkdf2(password || '', a.salt, iter);
-  if (hash !== a.hash) throw new Error('Wrong password — try again');
+  if (hash !== a.hash) throw new Error(AUTH_FAIL_MSG);
   if (iter < PBKDF2_ITER) {   // upgrade legacy hashes now that we hold the correct password
     try {
       const up = await pbkdf2(password, undefined, PBKDF2_ITER);
@@ -932,6 +941,7 @@ function mkThrottle(key, max, windowMs) {
 }
 const signinThrottle = mkThrottle('quicklist.rl', 5, 50 * 60 * 1000);      // 5 fails / 50 min
 const joinThrottle = mkThrottle('quicklist.rljoin', 8, 10 * 60 * 1000);   // 8 wrong codes / 10 min
+const resetThrottle = mkThrottle('quicklist.rlreset', 3, 15 * 60 * 1000); // 3 reset emails / 15 min
 const rlBlocked = () => signinThrottle.blocked();
 const rlRecordFail = () => signinThrottle.recordFail();
 const rlReset = () => signinThrottle.reset();
@@ -1224,12 +1234,20 @@ async function handleResetSubmit(form) {
   if (!email) return;
   const btn = document.getElementById('reset-submit');
   const err = document.getElementById('reset-error');
+  // Reset emails cost nothing to request, so without a cap this form can be
+  // used to flood someone's inbox from any device.
+  const blk = resetThrottle.blocked();
+  if (blk) { if (err) err.textContent = `Too many reset emails. Try again in ${throttleMins(blk)}.`; return; }
   if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
   try {
     const c = await ensureCloud();
+    resetThrottle.recordFail();   // count every request, sent or not
     await c.authm.sendPasswordResetEmail(c.auth, email);
-    closeSheet(); toast('Reset email sent — check your inbox');
+    closeSheet(); toast('If that email has an account, a reset link is on its way');
   } catch (e) {
+    // "user-not-found" would confirm which emails are registered — answer
+    // exactly like a success instead.
+    if (((e && e.code) || '') === 'auth/user-not-found') { closeSheet(); toast('If that email has an account, a reset link is on its way'); return; }
     if (err) err.textContent = humanAuthError(e);
     if (btn) { btn.disabled = false; btn.textContent = 'Send reset link'; }
   }
@@ -1246,9 +1264,11 @@ function humanAuthError(e) {
     'auth/invalid-email': 'That email address looks wrong.',
     'auth/weak-password': 'Password needs at least 8 characters.',
     'auth/password-does-not-meet-requirements': 'Password needs at least 8 characters.',
-    'auth/wrong-password': 'Wrong password — try again.',
-    'auth/user-not-found': 'No account with that email.',
-    'auth/invalid-credential': 'Email or password is incorrect.',
+    // wrong-password / user-not-found / invalid-credential all map to the SAME
+    // message on purpose — see AUTH_FAIL_MSG (account enumeration).
+    'auth/wrong-password': AUTH_FAIL_MSG,
+    'auth/user-not-found': AUTH_FAIL_MSG,
+    'auth/invalid-credential': AUTH_FAIL_MSG,
     'auth/popup-closed-by-user': 'Sign-in was cancelled.',
     'auth/network-request-failed': 'Network problem — check your connection.',
   };
