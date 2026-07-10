@@ -21,13 +21,18 @@
 // Keep in lockstep with versionCode in .github/workflows/android.yml — bump BOTH
 // every release (see PRD "Bump every release"), or installed apps stop noticing
 // new versions.
-const APP_VERSION_CODE = 48;
+const APP_VERSION_CODE = 49;
+
+// The public home of the web app — used for the update wall and for share links
+// (inside the APK location.origin is https://localhost, never usable in a link).
+const APP_URL = 'https://jacopodaffy-cloud.github.io/quick-list/';
+const PLAY_URL = 'https://play.google.com/store/apps/details?id=app.quicklist.twa';
 
 // Inside the APK a relative fetch would read the version.json BUNDLED at build
 // time (frozen forever) — the check must always ask the live site. On the web
 // the relative URL is the live site already.
 const VERSION_URL = (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform())
-  ? 'https://jacopodaffy-cloud.github.io/quick-list/version.json'
+  ? APP_URL + 'version.json'
   : 'version.json';
 
 async function checkForceUpdate() {
@@ -35,30 +40,34 @@ async function checkForceUpdate() {
     const res = await fetch(VERSION_URL + '?t=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
-    const url = data.playStoreUrl || 'https://play.google.com/store/apps/details?id=app.quicklist.twa';
+    // version.json comes from the network: trust nothing. Only a real
+    // play.google.com URL may replace the built-in one (it ends up in an href),
+    // and version codes must be actual numbers.
+    const url = (typeof data.playStoreUrl === 'string' && /^https:\/\/play\.google\.com\//.test(data.playStoreUrl)) ? data.playStoreUrl : PLAY_URL;
+    const minCode = Number.isInteger(data.minVersionCode) ? data.minVersionCode : 0;
     // Below the supported floor: block until updated (old versions have broken
-    // login/sync and must not keep running).
-    if (data.minVersionCode && APP_VERSION_CODE < data.minVersionCode) { showUpdateWall(url); return; }
-    // Newer version on the Play Store: gentle nudge, only in the installed app
-    // (the web app self-updates through the service worker).
-    if (window.Capacitor && data.latestVersionCode && APP_VERSION_CODE < data.latestVersionCode) {
-      toast('A new version of QuickList is available', 'Update', () => window.open(url, '_blank'));
-    }
+    // login/sync and must not keep running). No soft "update available" nudge —
+    // version.json is bumped before the Play Store publishes the release, so a
+    // banner would regularly announce an update that isn't installable yet.
+    if (minCode && APP_VERSION_CODE < minCode) showUpdateWall(url);
   } catch (e) { /* offline — don't block the user */ }
 }
 
 function showUpdateWall(url) {
   const wall = document.createElement('div');
   wall.id = 'update-wall';
+  // Static markup only; the (already validated) URL goes through setAttribute
+  // so no remote string is ever interpolated into HTML.
   wall.innerHTML = `
     <div class="update-box">
       <div class="update-logo">Quick<span>list</span></div>
       <div class="update-icon">🚀</div>
-      <h2 class="update-title">Update available</h2>
-      <p class="update-msg">A new version of QuickList is required to continue. Update now to keep your lists in sync.</p>
-      <a class="btn update-btn" href="${url}" target="_blank" rel="noopener">Update on Play Store</a>
+      <h2 class="update-title">Update required</h2>
+      <p class="update-msg">This version of QuickList is no longer supported. Update to keep your lists in sync.</p>
+      <a class="btn update-btn" target="_blank" rel="noopener">Update on Play Store</a>
     </div>
   `;
+  wall.querySelector('.update-btn').setAttribute('href', url);
   document.body.appendChild(wall);
 }
 
@@ -470,10 +479,15 @@ const initials = s => { const n = (s.username || s.email || 'You').trim(); const
 /* ---- device-local accounts (Web Crypto PBKDF2) ---- */
 const bytesToHex = b => [...b].map(x => x.toString(16).padStart(2, '0')).join('');
 const hexToBytes = h => new Uint8Array(h.match(/.{2}/g).map(x => parseInt(x, 16)));
-async function pbkdf2(password, saltHex) {
+// 600k iterations = the current OWASP recommendation for PBKDF2-HMAC-SHA-256.
+// Accounts created before v49 were hashed at 150k; each record stores its own
+// `iter` so old accounts still verify, and localSignIn transparently re-hashes
+// them at the new strength on the next successful sign-in.
+const PBKDF2_ITER = 600000, PBKDF2_ITER_LEGACY = 150000;
+async function pbkdf2(password, saltHex, iterations = PBKDF2_ITER) {
   const salt = saltHex ? hexToBytes(saltHex) : crypto.getRandomValues(new Uint8Array(16));
   const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' }, km, 256);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, km, 256);
   return { salt: bytesToHex(salt), hash: bytesToHex(new Uint8Array(bits)) };
 }
 const readAccounts = () => { try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) || {}; } catch (e) { return {}; } };
@@ -490,15 +504,23 @@ async function localSignUp({ username, email, password }) {
   const accts = readAccounts();
   if (Object.values(accts).some(a => matchUser(a, username) || (email && matchUser(a, email)))) throw new Error('That username or email is already taken');
   const { salt, hash } = await pbkdf2(password);
-  const u = { uid: 'local_' + uid(), username, email, salt, hash, createdAt: Date.now() };
+  const u = { uid: 'local_' + uid(), username, email, salt, hash, iter: PBKDF2_ITER, createdAt: Date.now() };
   accts[u.uid] = u; writeAccounts(accts);
   return { uid: u.uid, username, email, provider: 'local' };
 }
 async function localSignIn({ id, password }) {
   const a = Object.values(readAccounts()).find(x => matchUser(x, id));
   if (!a) throw new Error('No account found with that username or email');
-  const { hash } = await pbkdf2(password || '', a.salt);
+  const iter = Number.isInteger(a.iter) ? a.iter : PBKDF2_ITER_LEGACY;
+  const { hash } = await pbkdf2(password || '', a.salt, iter);
   if (hash !== a.hash) throw new Error('Wrong password — try again');
+  if (iter < PBKDF2_ITER) {   // upgrade legacy hashes now that we hold the correct password
+    try {
+      const up = await pbkdf2(password, undefined, PBKDF2_ITER);
+      const accts = readAccounts();
+      if (accts[a.uid]) { accts[a.uid] = { ...accts[a.uid], salt: up.salt, hash: up.hash, iter: PBKDF2_ITER }; writeAccounts(accts); }
+    } catch (e) { /* keep the legacy hash — sign-in itself succeeded */ }
+  }
   return { uid: a.uid, username: a.username, email: a.email, provider: 'local' };
 }
 
@@ -1855,8 +1877,10 @@ function setColor(id, hex) {
 
 /* ---- collaborative sharing sheets ---- */
 function shareMessage(l) {
-  const url = location.origin + location.pathname;
-  return `Join my QuickList "${stripFmt(l.title) || 'list'}" — open ${url} , tap Join and enter code:  ${l.code}`;
+  // Always link the public web app (APP_URL): inside the APK location.origin is
+  // https://localhost, which would put a dead link in the message. The ?join=
+  // param is handled on startup (handleJoinLink) and opens the list directly.
+  return `Join my QuickList "${stripFmt(l.title) || 'list'}" — tap to open it:\n${APP_URL}?join=${l.code}\n(or open QuickList, tap Join and enter code ${l.code})`;
 }
 function openShareSheet(l) {
   if (typeof l === 'string') l = getList(l); if (!l) return;
@@ -1886,6 +1910,21 @@ function openJoinSheet() {
     <p class="auth-foot">${I.users}<span>${CLOUD_ENABLED ? 'You and everyone with the code see the same list, live.' : 'Cloud sharing isn\'t set up on this build yet.'}</span></p>
   `);
 }
+/* Opened from a shared link (…/?join=CODE): join that list straight away.
+   The param is stripped from the URL first so a reload doesn't re-trigger it. */
+async function handleJoinLink() {
+  let code = '';
+  try { code = cleanCode(new URLSearchParams(location.search).get('join')); } catch (e) { }
+  if (!code || code.length < 4) return;
+  try { history.replaceState(null, '', location.pathname); } catch (e) { }
+  toast('Opening the shared list…');
+  try {
+    const l = await joinByCode(code);
+    showDetail(l.id);
+    toast('Joined the list');
+  } catch (e) { toast(shareErrMsg(e)); }
+}
+
 async function handleJoinSubmit(form) {
   const err = $('#join-error'), btn = form.querySelector('button[type=submit]');
   const code = (new FormData(form).get('code') || '').trim();
@@ -2206,5 +2245,6 @@ function init() {
     }
   } catch (e) { }
   checkForceUpdate();
+  handleJoinLink();            // opened from a shared ?join=CODE link → join + open the list
 }
 try { init(); } catch (err) { showFatal(err); }
