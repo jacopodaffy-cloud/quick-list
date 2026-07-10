@@ -178,8 +178,21 @@ function applyTheme() {
   const root = document.documentElement;
   if (settings.theme === 'light' || settings.theme === 'dark') root.setAttribute('data-theme', settings.theme);
   else root.removeAttribute('data-theme');
+  const dark = effectiveDark();
   const tc = document.getElementById('tc');
-  if (tc) tc.setAttribute('content', effectiveDark() ? '#0D0E12' : '#F5F6F8');
+  if (tc) tc.setAttribute('content', dark ? '#0D0E12' : '#F5F6F8');
+  // The meta tag above only styles the BROWSER's UI. In the installed app the
+  // native status bar must be driven directly, or it sits on top of the app as
+  // a grey slab (Capacitor's default). Colours mirror the meta; style LIGHT =
+  // dark icons on a light bar, DARK = light icons on a dark bar.
+  try {
+    const SB = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar;
+    if (SB) {
+      SB.setOverlaysWebView({ overlay: false }).catch(() => { });
+      SB.setBackgroundColor({ color: dark ? '#0D0E12' : '#F5F6F8' }).catch(() => { });
+      SB.setStyle({ style: dark ? 'DARK' : 'LIGHT' }).catch(() => { });
+    }
+  } catch (e) { /* web, or plugin missing from an old build */ }
 }
 function setTheme(t) { if (['system', 'light', 'dark'].includes(t)) { settings.theme = t; saveSettings(); applyTheme(); } }
 
@@ -648,21 +661,26 @@ function shareErrMsg(e) {
   if (/network|unavailable|failed/.test(code)) return 'Network problem — check your connection and try again.';
   return (e && !e.code && e.message) || 'Something went wrong — try again.';
 }
+/* Give the list a live share code if it doesn't have one yet: mirrors it to
+   Firestore, marks it shared, starts live sync. Returns the code. */
+async function ensureShared(l) {
+  if (l.shared && l.code) return l.code;
+  const c = await ensureAuthToken();
+  const code = genCode();
+  // Write FIRST and await it: if the rules aren't deployed or anon auth is off,
+  // this throws and we surface the reason — we never show a code that doesn't work.
+  await c.fs.setDoc(c.fs.doc(c.db, 'shared', code), sharePayload({ ...l, code, shared: true }));
+  l.code = code; l.shared = true; touch(l); save();
+  subscribeShared(l); checkBadges();
+  return code;
+}
 async function createShare(id) {
   const l = getList(id); if (!l) return;
   if (l.shared && l.code) return openShareSheet(l);
   if (!CLOUD_ENABLED) { toast('Cloud sharing is not set up yet'); return; }
   toast('Creating share link…');
-  try {
-    const c = await ensureAuthToken();
-    const code = genCode();
-    // Write FIRST and await it: if the rules aren't deployed or anon auth is off,
-    // this throws and we surface the reason — we never show a code that doesn't work.
-    await c.fs.setDoc(c.fs.doc(c.db, 'shared', code), sharePayload({ ...l, code, shared: true }));
-    l.code = code; l.shared = true; touch(l); save();
-    subscribeShared(l); checkBadges();
-    openShareSheet(l);
-  } catch (e) { toast(shareErrMsg(e)); }
+  try { await ensureShared(l); openShareSheet(l); }
+  catch (e) { toast(shareErrMsg(e)); }
 }
 function stopSharing(id) {
   const l = getList(id); if (!l) return;
@@ -1820,10 +1838,26 @@ function listToText(l) {
   l.items.forEach(it => { const t = stripFmt(it.text) || (it.img ? '📷 Photo' : ''); lines.push((it.done ? '✓ ' : '• ') + t + (it.img && it.text ? ' 📷' : '') + (it.qty > 1 ? ` ×${it.qty}` : '')); });
   return lines.join('\n');
 }
-function shareWhatsApp(id) {
+/* The WhatsApp button shares the list as text PLUS a tap-to-open join link:
+   the list is marked as shared (gets its code on first use) so whoever taps
+   the link lands in the same live list. No cloud → text only, like before. */
+async function shareWhatsApp(id) {
   const l = getList(id); if (!l) return;
   if (!l.items.length) { toast('Add an item first'); return; }
-  window.open('https://wa.me/?text=' + encodeURIComponent(listToText(l)), '_blank', 'noopener');
+  let link = '';
+  if (CLOUD_ENABLED) {
+    try {
+      const wasShared = !!(l.shared && l.code);
+      link = APP_URL + '?join=' + await ensureShared(l);
+      if (!wasShared) rerender();   // show the "shared" pill straight away
+    } catch (e) { /* offline / rules missing — still share the text */ }
+  }
+  const msg = listToText(l) + (link ? '\n\nEdit it with me — tap to open:\n' + link : '');
+  const url = 'https://wa.me/?text=' + encodeURIComponent(msg);
+  const w = window.open(url, '_blank', 'noopener');
+  // Popup blockers can eat a window.open that follows a network wait — offer
+  // the same link again from a direct tap, which is always allowed.
+  if (!w) toast('List ready to share', 'Open WhatsApp', () => window.open(url, '_blank', 'noopener'));
 }
 async function copyList(id) {
   const l = getList(id); if (!l) return;
