@@ -21,7 +21,7 @@
 // Keep in lockstep with versionCode in .github/workflows/android.yml — bump BOTH
 // every release (see PRD "Bump every release"), or installed apps stop noticing
 // new versions.
-const APP_VERSION_CODE = 52;
+const APP_VERSION_CODE = 53;
 
 // The public home of the web app — used for the update wall and for share links
 // (inside the APK location.origin is https://localhost, never usable in a link).
@@ -310,7 +310,13 @@ const writeData = (key, s) => { try { localStorage.setItem(key, JSON.stringify(s
 function load() {
   const s = readData(activeKey());
   if (s) return s;
-  return session ? blank() : seed();      // accounts start empty; guest gets the demo
+  if (session) return blank();            // accounts start empty
+  // A brand-new user arriving through a shared ?join= link must start EMPTY.
+  // The demo seed ("Weekend groceries", the trip list, "Weekend ideas") looks
+  // exactly like the sender's own lists — so people who joined one shared list
+  // believed the sender had shared ALL of their lists.
+  try { if (cleanCode(new URLSearchParams(location.search).get('join'))) return blank(); } catch (e) { }
+  return seed();                          // normal first open: guest gets the demo
 }
 function save() {
   state.updatedAt = Date.now();
