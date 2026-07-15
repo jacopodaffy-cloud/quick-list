@@ -21,7 +21,7 @@
 // Keep in lockstep with versionCode in .github/workflows/android.yml — bump BOTH
 // every release (see PRD "Bump every release"), or installed apps stop noticing
 // new versions.
-const APP_VERSION_CODE = 51;
+const APP_VERSION_CODE = 52;
 
 // The public home of the web app — used for the update wall and for share links
 // (inside the APK location.origin is https://localhost, never usable in a link).
@@ -46,11 +46,40 @@ async function checkForceUpdate() {
     const url = (typeof data.playStoreUrl === 'string' && /^https:\/\/play\.google\.com\//.test(data.playStoreUrl)) ? data.playStoreUrl : PLAY_URL;
     const minCode = Number.isInteger(data.minVersionCode) ? data.minVersionCode : 0;
     // Below the supported floor: block until updated (old versions have broken
-    // login/sync and must not keep running). No soft "update available" nudge —
-    // version.json is bumped before the Play Store publishes the release, so a
-    // banner would regularly announce an update that isn't installable yet.
-    if (minCode && APP_VERSION_CODE < minCode) showUpdateWall(url);
+    // login/sync and must not keep running).
+    if (minCode && APP_VERSION_CODE < minCode) { showUpdateWall(url); return; }
+    // Still supported but a newer build exists on the Play Store: show the
+    // Play-style "update available" prompt. Strictly gated — it can only ever
+    // appear when latestVersionCode really is ahead of this build.
+    const latest = Number.isInteger(data.latestVersionCode) ? data.latestVersionCode : 0;
+    if (latest && APP_VERSION_CODE < latest) maybeUpdateNudge(url, latest);
   } catch (e) { /* offline — don't block the user */ }
+}
+
+/* Soft update prompt (native app only — in the browser the service worker
+   refreshes the app by itself, and "update on Play Store" would be nonsense).
+   Re-shown at most once a day per pending version so it informs, not nags.
+   Note: version.json is bumped when the release is uploaded, so right after a
+   release the Play listing can lag a little behind the prompt. */
+const UPDATE_SEEN_KEY = 'quicklist.updSeen';
+function maybeUpdateNudge(url, latest) {
+  const native = window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform();
+  if (!native) return;
+  let seen = null; try { seen = JSON.parse(localStorage.getItem(UPDATE_SEEN_KEY)); } catch (e) { }
+  if (seen && seen.code === latest && Date.now() - seen.t < 20 * 3600 * 1000) return;
+  try { localStorage.setItem(UPDATE_SEEN_KEY, JSON.stringify({ code: latest, t: Date.now() })); } catch (e) { }
+  openUpdateSheet(url);
+}
+function openUpdateSheet(url) {
+  openSheet(`
+    <div class="upd-hero">🚀</div>
+    <h2 class="sheet-title" style="text-align:center">Update available</h2>
+    <p class="sheet-sub" style="text-align:center">A new version of QuickList is on the Play Store — update to get the latest features and fixes.</p>
+    <a class="btn btn-c btn-block" id="upd-link" target="_blank" rel="noopener" style="--c:#21A971;--on:#fff">Update on Play Store</a>
+    <button class="btn btn-ghost btn-block" style="margin-top:8px" data-auth="close">Later</button>
+  `);
+  // The (already validated) URL goes through setAttribute — never interpolated.
+  const a = document.getElementById('upd-link'); if (a) a.setAttribute('href', url);
 }
 
 function showUpdateWall(url) {
@@ -223,14 +252,20 @@ let session = null;   // { uid, email, username, provider } | null  (set in init
 const dataKeyFor = uid => 'quicklist.data.' + uid;
 const activeKey = () => session ? dataKeyFor(session.uid) : KEY;
 
-const newStats = () => ({ created: 0, completed: 0, checked: 0, since: Date.now() });
+const newStats = () => ({ created: 0, completed: 0, checked: 0, streak: 0, bestStreak: 0, streakDay: '', since: Date.now() });
 function blank() { return { v: 1, lists: [], nextColor: 0, sort: 'recent', filterColor: null, stats: newStats(), updatedAt: Date.now() }; }
 const validColor = c => (PALETTE.some(p => p.hex === c) ? c : PALETTE[0].hex);
 const cleanId = id => (typeof id === 'string' && /^[\w-]{1,40}$/.test(id)) ? id : uid();
 function normStats(st) {
   st = (st && typeof st === 'object') ? st : {};
   const n = v => (Number.isFinite(v) && v >= 0) ? Math.min(Math.floor(v), 1e7) : 0;
-  return { created: n(st.created), completed: n(st.completed), checked: n(st.checked), since: Number.isFinite(st.since) ? st.since : Date.now() };
+  return {
+    created: n(st.created), completed: n(st.completed), checked: n(st.checked),
+    streak: n(st.streak),
+    bestStreak: Math.max(n(st.bestStreak), n(st.streak)),   // best can never trail current
+    streakDay: (typeof st.streakDay === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(st.streakDay)) ? st.streakDay : '',
+    since: Number.isFinite(st.since) ? st.since : Date.now(),
+  };
 }
 /* Deep sanitiser — every state that enters the app (storage, cloud pull,
    shared link, merge) passes through here: malformed dropped, oversized clamped. */
@@ -348,18 +383,124 @@ function bumpStat(key, by = 1) {
   state.stats[key] = (state.stats[key] || 0) + by;
 }
 const distinctColors = () => new Set((state.lists || []).map(l => l.color)).size;
+
+/* ---- daily streak (Duolingo-style) ----
+   `streak` = consecutive local days the app was opened/used, `streakDay` = the
+   last counted day ('YYYY-MM-DD', local time), `bestStreak` = all-time high
+   (monotonic, so streak badges never un-earn after a missed day). All three
+   live in state.stats, so they persist and sync like the other counters. */
+const dayKey = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+let streakJustUp = false;   // one-shot flag: makes the home chip pop after an increment
+function touchStreak() {
+  if (!state) return false;
+  if (!state.stats) state.stats = newStats();
+  const st = state.stats, today = dayKey();
+  if (st.streakDay === today) return false;              // already counted today
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  st.streak = (st.streakDay === dayKey(y)) ? (st.streak || 0) + 1 : 1;   // consecutive → extend, gap → restart
+  st.streakDay = today;
+  if (st.streak > (st.bestStreak || 0)) st.bestStreak = st.streak;
+  streakJustUp = true;
+  return true;
+}
+function renderStreakChip() {
+  const b = $('#streak-btn'); if (!b) return;
+  const n = statsOf().streak || 0;
+  b.hidden = n < 1;
+  if (n < 1) return;
+  const num = $('#streak-n'); if (num) num.textContent = n;
+  b.setAttribute('aria-label', `${n}-day streak — see details`);
+  if (streakJustUp) { streakJustUp = false; b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); }
+}
+function streakToast() {
+  const n = statsOf().streak || 0;
+  if (n >= 2) toast(`🔥 ${n}-day streak — keep it going!`);
+}
+function streakWeekHTML() {
+  // The trailing 7 days: day i-ago is part of the streak when i < streak.
+  const n = statsOf().streak || 0, cells = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const lit = i < n;
+    cells.push(`<div class="streak-day ${lit ? 'lit' : ''}"><i>${lit ? '🔥' : ''}</i><span>${esc(d.toLocaleDateString(undefined, { weekday: 'narrow' }))}</span></div>`);
+  }
+  return `<div class="streak-week">${cells.join('')}</div>`;
+}
+const nextStreakBadge = () => BADGES.filter(b => b.cat === 'streak' && b.goal > (statsOf().streak || 0)).sort((a, b) => a.goal - b.goal)[0];
+/* The three live streak widgets shown on the streak page — the same designs
+   the phone home-screen widgets will use (flame count, badge ring, week). */
+function streakWidgetsHTML() {
+  const st = statsOf(), n = st.streak || 0;
+  const next = nextStreakBadge();
+  const goal = next ? next.goal : Math.max(st.bestStreak || n, 1);
+  const R = 26, C = 2 * Math.PI * R, pct = clamp(n / goal, 0, 1);
+  return `
+    <p class="field-label">Widgets</p>
+    <div class="widget-grid">
+      <div class="widget w-flame">
+        <span class="wf-fl">🔥</span><b>${n}</b>
+        <span class="wf-lab">day streak</span>
+      </div>
+      <div class="widget w-ring">
+        <div class="ring-wrap">
+          <svg viewBox="0 0 64 64" aria-hidden="true">
+            <circle class="ring-bg" cx="32" cy="32" r="${R}"/>
+            <circle class="ring-fg" cx="32" cy="32" r="${R}" stroke-dasharray="${(pct * C).toFixed(1)} ${C.toFixed(1)}"/>
+          </svg>
+          <span class="ring-mid">🔥</span>
+        </div>
+        <span class="wf-lab">${next ? `${n}/${goal} to “${esc(next.name)}”` : 'record pace'}</span>
+      </div>
+      <div class="widget w-week">
+        <span class="ww-title">Your week</span>
+        ${streakWeekHTML()}
+        <span class="wf-lab">today counted ✓</span>
+      </div>
+    </div>
+    <p class="widget-note">Live previews with your real streak. On Android, long-press the QuickList icon on your home screen to pin the “Streak” shortcut for one-tap access.</p>`;
+}
+function renderStreakPage() {
+  const st = statsOf(), n = st.streak || 0, best = st.bestStreak || n;
+  const next = nextStreakBadge();
+  $('#streak-body').innerHTML = `
+    <div class="streak-hero">
+      <div class="streak-flame">🔥</div>
+      <div class="streak-count">${n}-day streak</div>
+      <p class="streak-best">Opened today ✓</p>
+    </div>
+    ${streakWeekHTML()}
+    <div class="streak-stats">
+      <div><b>${n}</b><span>Current</span></div>
+      <div><b>${best}</b><span>Best</span></div>
+      <div><b>${next ? next.goal - n : '—'}</b><span>${next ? `Days to ${esc(next.icon)}` : 'All badges'}</span></div>
+    </div>
+    <p class="streak-hint">Open QuickList every day to keep the flame alive — miss a day and the streak starts over.</p>
+    ${streakWidgetsHTML()}
+  `;
+}
+function showStreak(push = true) {
+  view.name = 'streak'; view.id = null;
+  $('#page-home').hidden = true; $('#page-detail').hidden = true;
+  document.body.classList.remove('fmt-on', 'view-home', 'view-detail');
+  document.body.classList.add('view-streak');
+  const p = $('#page-streak'); p.hidden = false;
+  p.style.animation = 'none'; void p.offsetWidth; p.style.animation = '';
+  renderStreakPage();
+  requestAnimationFrame(() => { p.scrollTop = 0; });
+  if (push) pushNav({ v: 'streak' });
+}
 const listIsComplete = l => l.items.length > 0 && l.items.every(i => i.done);
 const listCount = () => (state.lists || []).length;
 const sharedCount = () => (state.lists || []).filter(l => l.shared).length;
 const maxListSize = () => (state.lists || []).reduce((m, l) => Math.max(m, (l.items || []).length), 0);
 
-/* 50 badges across 7 categories. All values are derived (no extra source of
+/* 55 badges across 8 categories. All values are derived (no extra source of
    truth) — `val` reads stats / live lists / level. `cat` groups them in the UI. */
 const BADGE_CATS = [
   { id: 'create', label: 'Creating' }, { id: 'finish', label: 'Completing' },
   { id: 'check', label: 'Checking off' }, { id: 'colour', label: 'Colours' },
-  { id: 'collab', label: 'Collaboration' }, { id: 'level', label: 'Levels' },
-  { id: 'collect', label: 'Collecting' },
+  { id: 'collab', label: 'Collaboration' }, { id: 'streak', label: 'Streaks' },
+  { id: 'level', label: 'Levels' }, { id: 'collect', label: 'Collecting' },
 ];
 const BADGES = [
   // — Creating (lists created) —
@@ -405,6 +546,12 @@ const BADGES = [
   { id: 'cl1',  cat: 'collab', icon: '🔗', name: 'Sharer',        desc: 'Share a list with a code',goal: 1,  val: () => sharedCount() },
   { id: 'cl2',  cat: 'collab', icon: '🤝', name: 'Team Player',   desc: 'Have 2 shared lists',    goal: 2,   val: () => sharedCount() },
   { id: 'cl5',  cat: 'collab', icon: '👥', name: 'Collaborator',  desc: 'Have 5 shared lists',    goal: 5,   val: () => sharedCount() },
+  // — Streaks (days in a row; uses the all-time best so they never un-earn) —
+  { id: 'st3',  cat: 'streak', icon: '🕯️', name: 'Spark',          desc: 'Use QuickList 3 days in a row',  goal: 3,  val: s => s.bestStreak },
+  { id: 'st7',  cat: 'streak', icon: '🧨', name: 'Week of Fire',   desc: 'A 7-day streak',         goal: 7,   val: s => s.bestStreak },
+  { id: 'st14', cat: 'streak', icon: '☄️', name: 'Blazing',        desc: 'A 14-day streak',        goal: 14,  val: s => s.bestStreak },
+  { id: 'st30', cat: 'streak', icon: '🌋', name: 'Inferno',        desc: 'A 30-day streak',        goal: 30,  val: s => s.bestStreak },
+  { id: 'st60', cat: 'streak', icon: '🏮', name: 'Eternal Flame',  desc: 'A 60-day streak',        goal: 60,  val: s => s.bestStreak },
   // — Levels (points) —
   { id: 'lv2',  cat: 'level', icon: '🥉', name: 'Level 2',        desc: 'Reach level 2',          goal: 2,   val: () => levelOf() },
   { id: 'lv3',  cat: 'level', icon: '🥈', name: 'Level 3',        desc: 'Reach level 3',          goal: 3,   val: () => levelOf() },
@@ -810,10 +957,17 @@ function mergeStates(primary, secondary) {
   // Achievement counters are cumulative and monotonic — take the max across
   // devices so progress (points/badges) is never lost or double-counted on sync.
   const sa = normStats(a.stats), sb = normStats(b.stats);
+  // Streak is NOT monotonic (it resets after a missed day), so "max" would
+  // resurrect dead streaks: trust whichever side was active most recently
+  // (ISO day strings compare correctly; '' always loses). Best stays a max.
+  const newer = sa.streakDay >= sb.streakDay ? sa : sb;
   const stats = {
     created: Math.max(sa.created, sb.created),
     completed: Math.max(sa.completed, sb.completed),
     checked: Math.max(sa.checked, sb.checked),
+    streak: sa.streakDay === sb.streakDay ? Math.max(sa.streak, sb.streak) : newer.streak,
+    streakDay: newer.streakDay,
+    bestStreak: Math.max(sa.bestStreak, sb.bestStreak),
     since: Math.min(sa.since, sb.since),
   };
   return {
@@ -836,6 +990,7 @@ async function activateSession(user, { adoptGuest = false } = {}) {
     if (guest && guest.lists.length && base.lists.length === 0) base = mergeStates(base, guest);
   }
   state = normalize(base) || blank();
+  touchStreak();                                     // count today for this account (quietly — no toast on sign-in)
   writeData(activeKey(), state);
   snapshotBadges();                                  // baseline for this account (no false "unlocked" toasts)
   if (user.provider === 'cloud') { cloudPush(); cloudSubscribe(); writeProfile(user); schedulePublishRank(); }
@@ -845,7 +1000,9 @@ function endSession() {
   if (cloudUnsub) { cloudUnsub(); cloudUnsub = null; }
   if (cloud && cloud.auth && cloud.auth.currentUser) cloud.authm.signOut(cloud.auth).catch(() => { });
   session = null; saveSession(null);
-  state = load(); snapshotBadges(); refreshAccountUI();
+  state = load();
+  if (touchStreak()) writeData(activeKey(), state);   // the guest data keeps its own streak
+  snapshotBadges(); refreshAccountUI();
 }
 
 /* ---- auth actions invoked by the UI ---- */
@@ -1125,7 +1282,7 @@ function openAchievementsSheet() {
   openSheet(`
     <div class="achv-head">
       <div class="stat-points"><b>${points().toLocaleString()}</b><span>points</span><span class="stat-level">Level ${levelOf()}</span></div>
-      <p class="achv-sub">${earnedCount()} of ${BADGES.length} badges unlocked</p>
+      <p class="achv-sub">${earnedCount()} of ${BADGES.length} badges unlocked${(statsOf().streak || 0) > 1 ? ` · 🔥 ${statsOf().streak}-day streak` : ''}</p>
     </div>
     <div class="seg seg-ico">
       <button class="seg-btn ${tab === 'badges' ? 'on' : ''}" data-achv-tab="badges">${I.medal}<span>Badges</span></button>
@@ -1313,18 +1470,20 @@ const view = { name: 'home', id: null };
 let histOK = true;
 const pushNav = o => { if (histOK) try { history.pushState(o, ''); } catch (e) { histOK = false; } };
 function navBack() { if (histOK) history.back(); else manualBack(); }
-function manualBack() { if (sheetOpen()) return closeSheet(); if (view.name === 'detail') showHome(false); }
+function manualBack() { if (sheetOpen()) return closeSheet(); if (view.name !== 'home') showHome(false); }
 window.addEventListener('popstate', e => {
   if (sheetOpen()) return closeSheetNow();
   if (e.state && e.state.v === 'detail' && getList(e.state.id)) showDetail(e.state.id, false);
+  else if (e.state && e.state.v === 'streak') showStreak(false);
   else showHome(false);
 });
 
 function showHome(push = false) {
   view.name = 'home'; view.id = null;
-  document.body.classList.remove('fmt-on', 'view-detail');
+  document.body.classList.remove('fmt-on', 'view-detail', 'view-streak');
   document.body.classList.add('view-home');
   $('#page-detail').hidden = true;
+  $('#page-streak').hidden = true;
   const h = $('#page-home'); h.hidden = false;
   h.style.animation = 'none'; void h.offsetWidth; h.style.animation = '';
   renderHome();
@@ -1335,16 +1494,17 @@ function showDetail(id, push = true) {
   if (!getList(id)) return showHome(false);
   view.name = 'detail'; view.id = id;
   $('#page-home').hidden = true;
+  $('#page-streak').hidden = true;
   const d = $('#page-detail'); d.hidden = false;
   d.style.animation = 'none'; void d.offsetWidth; d.style.animation = '';
   $('#add-input').value = ''; syncSend();
-  document.body.classList.remove('fmt-on', 'view-home');
+  document.body.classList.remove('fmt-on', 'view-home', 'view-streak');
   document.body.classList.add('view-detail');
   renderDetail();
   requestAnimationFrame(() => { d.scrollTop = 0; updateScrollbar(); });
   if (push) pushNav({ v: 'detail', id });
 }
-const rerender = () => view.name === 'detail' ? renderDetail() : renderHome();
+const rerender = () => view.name === 'detail' ? renderDetail() : view.name === 'streak' ? renderStreakPage() : renderHome();
 
 // Open a list straight from an open sheet, deterministically. The old pattern
 // (closeSheet() → history.back() → setTimeout → showDetail() → pushState) was a
@@ -1399,18 +1559,23 @@ const hl = (text, q) => q ? esc(text).replace(new RegExp(`(${reEsc(q)})`, 'ig'),
    so user input can never inject HTML (XSS-safe). Rules are applied outer→inner
    so styles combine, e.g. **__both__** → <strong><u>both</u></strong>. */
 const FORMAT_RULES = [
+  // {c:#RRGGBB}coloured text{/c} — the hex is locked to exactly 6 hex digits by
+  // the regex, so the value interpolated into the style attribute can only ever
+  // be a colour (no style/HTML injection). Runs first so colour wraps cleanly
+  // around bold/underline and vice versa.
+  { re: /\{c:(#[0-9A-Fa-f]{6})\}([\s\S]+?)\{\/c\}/g, sub: '<span style="color:$1">$2</span>', plain: '$2' },
   { re: /\*\*([^*]+?)\*\*/g, tag: 'strong' },   // **bold**
   { re: /__([^_]+?)__/g,     tag: 'u' },         // __underline__
   // future, e.g.: { re: /~~([^~]+?)~~/g, tag: 's' }  // ~~strikethrough~~
 ];
 function fmtText(s) {
   let h = esc(s);
-  for (const r of FORMAT_RULES) h = h.replace(r.re, `<${r.tag}>$1</${r.tag}>`);
+  for (const r of FORMAT_RULES) h = h.replace(r.re, r.sub || `<${r.tag}>$1</${r.tag}>`);
   return h;
 }
 function stripFmt(s) {
   let t = String(s == null ? '' : s);
-  for (const r of FORMAT_RULES) t = t.replace(r.re, '$1');
+  for (const r of FORMAT_RULES) t = t.replace(r.re, r.plain || '$1');
   return t;
 }
 
@@ -1449,6 +1614,7 @@ function ItemRow(it) {
 /* ---- Home view ---- */
 function renderHome() {
   requestAnimationFrame(updateScrollbar);   // refresh the scrollbar thumb after the grid re-renders
+  renderStreakChip();
   const total = state.lists.length;
   const ls = homeView();
   const filtering = !!(homeQuery.trim() || state.filterColor);
@@ -1978,6 +2144,19 @@ function openJoinSheet() {
     <p class="auth-foot">${I.users}<span>${CLOUD_ENABLED ? 'You and everyone with the code see the same list, live.' : 'Cloud sharing isn\'t set up on this build yet.'}</span></p>
   `);
 }
+/* App-shortcut launches (?new=1 / ?streak=1 / ?joincode=1) — the manifest
+   shortcuts a user pins from the home screen (long-press the app icon). The
+   param is stripped first so a reload doesn't repeat the action. */
+function handleShortcutParams() {
+  let q; try { q = new URLSearchParams(location.search); } catch (e) { return; }
+  const act = q.get('new') ? 'new' : q.get('streak') ? 'streak' : q.get('joincode') ? 'join' : '';
+  if (!act) return;
+  try { history.replaceState({ v: 'home' }, '', location.pathname); } catch (e) { }
+  if (act === 'new') { const l = createList(); showDetail(l.id); setTimeout(() => $('#add-input').focus(), 320); }
+  else if (act === 'streak') showStreak();
+  else openJoinSheet();
+}
+
 /* Opened from a shared link (…/?join=CODE): join that list straight away.
    The param is stripped from the URL first so a reload doesn't re-trigger it. */
 async function handleJoinLink() {
@@ -2193,36 +2372,79 @@ $('#items').addEventListener('click', e => {
   if (text) beginEdit(text.dataset.edit);
 });
 
-/* ---- inline text formatting (bold / underline) ---- */
-function wrapSelection(input, marker) {
+/* ---- inline text formatting (bold / underline / text colour) ---- */
+/* Applying bold/underline also scrubs stray markdown noise (hashtags, *, _, ~,
+   backticks) from the selection — pasted text like "## Milk" becomes clean
+   bold "Milk" instead of keeping the symbols. Our own colour markers inside
+   the selection are preserved (their "#" is part of the marker, not noise). */
+function cleanMarkup(s) {
+  return s.split(/(\{c:#[0-9A-Fa-f]{6}\}|\{\/c\})/)
+    .map((part, i) => i % 2 ? part : part.replace(/[*_~`#]+/g, ''))
+    .join('').replace(/ {2,}/g, ' ');
+}
+function wrapSelection(input, pre, post = pre, clean = false) {
   if (!input) return;
   const v = input.value;
   let s = input.selectionStart, e = input.selectionEnd;
   if (s == null) { s = e = v.length; }
-  const sel = v.slice(s, e);
+  let sel = v.slice(s, e);
   if (sel) {
-    input.value = v.slice(0, s) + marker + sel + marker + v.slice(e);
-    input.setSelectionRange(s + marker.length, e + marker.length);
+    if (clean) sel = cleanMarkup(sel);
+    // Edge whitespace stays OUTSIDE the markers ("Milk **" never "** Milk"), so
+    // styled text starts crisply even when a stripped "## " left a gap behind.
+    const lead = sel.match(/^\s*/)[0], rest = sel.slice(lead.length);
+    const trail = rest.match(/\s*$/)[0], core = rest.slice(0, rest.length - trail.length);
+    input.value = v.slice(0, s) + lead + pre + core + post + trail + v.slice(e);
+    input.setSelectionRange(s + lead.length + pre.length, s + lead.length + pre.length + core.length);
   } else {
-    input.value = v.slice(0, s) + marker + marker + v.slice(s);
-    const p = s + marker.length; input.setSelectionRange(p, p);
+    input.value = v.slice(0, s) + pre + post + v.slice(s);
+    const p = s + pre.length; input.setSelectionRange(p, p);
   }
+}
+/* Colour is applied via the marker pair; "remove colour" unwraps the markers in
+   the selection (or, with nothing selected, in the whole text) — the text
+   itself is never altered, only its colour. */
+const COLOR_MARK_RE = /\{c:#[0-9A-Fa-f]{6}\}([\s\S]*?)\{\/c\}/g;
+function clearColor(input) {
+  if (!input) return;
+  const v = input.value;
+  let s = input.selectionStart, e = input.selectionEnd;
+  if (s == null || s === e) { input.value = v.replace(COLOR_MARK_RE, '$1'); return; }
+  const cleaned = v.slice(s, e).replace(COLOR_MARK_RE, '$1');
+  input.value = v.slice(0, s) + cleaned + v.slice(e);
+  input.setSelectionRange(s, s + cleaned.length);
 }
 const fmtTarget = () => { const a = document.activeElement; return (a && (a.id === 'add-input' || a.classList.contains('item-edit'))) ? a : $('#add-input'); };
 // pointerdown + preventDefault keeps the text field focused and its selection intact
 document.addEventListener('pointerdown', e => {
+  const sw = e.target.closest('[data-fmt-color]');
+  if (sw) {
+    e.preventDefault();
+    const input = fmtTarget(), hex = sw.dataset.fmtColor;
+    if (hex) wrapSelection(input, `{c:${hex}}`, '{/c}');
+    else clearColor(input);
+    $('#fmt-colors').hidden = true;
+    if (input && input.id === 'add-input') syncSend();
+    buzz(6);
+    return;
+  }
   const b = e.target.closest('[data-fmt]'); if (!b) return;
   e.preventDefault();
+  if (b.dataset.fmt === 'color') { const row = $('#fmt-colors'); row.hidden = !row.hidden; buzz(6); return; }
   const input = fmtTarget();
-  wrapSelection(input, b.dataset.fmt === 'bold' ? '**' : '__');
+  wrapSelection(input, b.dataset.fmt === 'bold' ? '**' : '__', undefined, true);
   if (input && input.id === 'add-input') syncSend();
   buzz(6);
 });
 // The formatting bar only appears while a text field is focused (add or edit)
-document.addEventListener('focusin', e => { if (e.target.matches('#add-input, .item-edit')) document.body.classList.add('fmt-on'); });
+document.addEventListener('focusin', e => {
+  if (!e.target.matches('#add-input, .item-edit')) return;
+  document.body.classList.add('fmt-on');
+  $('#fmt-colors').hidden = true;   // swatches start collapsed for each field
+});
 document.addEventListener('focusout', e => {
   if (!e.target.matches('#add-input, .item-edit')) return;
-  setTimeout(() => { const a = document.activeElement; if (!a || !a.matches('#add-input, .item-edit')) document.body.classList.remove('fmt-on'); }, 60);
+  setTimeout(() => { const a = document.activeElement; if (!a || !a.matches('#add-input, .item-edit')) { document.body.classList.remove('fmt-on'); $('#fmt-colors').hidden = true; } }, 60);
 });
 
 /* Keep the add bar visible above the on-screen keyboard. The visualViewport
@@ -2246,11 +2468,19 @@ $('#add-input').addEventListener('blur', () => { setTimeout(syncKeyboard, 50); }
 
 $('#backdrop').addEventListener('click', closeSheet);
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { if (sheetOpen()) closeSheet(); else if (view.name === 'detail') navBack(); }
+  if (e.key === 'Escape') { if (sheetOpen()) closeSheet(); else if (view.name !== 'home') navBack(); }
 });
 
 /* Drag-state safety cleanup (native scroll needs no JS) */
-document.addEventListener('visibilitychange', () => { if (document.hidden && drag) onDragEnd(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { if (drag) onDragEnd(); return; }
+  // Coming back to an app that stayed open across midnight (or all day in the
+  // background) must still count the new day — reload isn't required.
+  if (state && touchStreak()) {
+    save(); streakToast(); checkBadges(); renderStreakChip();
+    if (view.name === 'streak') renderStreakPage();
+  }
+});
 
 /* ====================== 7. Init ====================== */
 function init() {
@@ -2276,12 +2506,24 @@ function init() {
   $('#fab-icon').innerHTML = I.plus;
   if (!SR) $('#mic').style.display = 'none';
 
+  // Text-colour swatches for the formatting bar (same 10-colour identity palette)
+  $('#fmt-colors').innerHTML = PALETTE.map(p =>
+    `<button type="button" class="fmt-swatch" style="background:${p.hex}" data-fmt-color="${p.hex}" aria-label="${p.id} text"></button>`).join('')
+    + `<button type="button" class="fmt-swatch clear" data-fmt-color="" aria-label="Remove colour">${I.x}</button>`;
+  $('#streak-btn').addEventListener('click', () => showStreak());
+  $('#streak-back').innerHTML = I.back;
+  $('#streak-back').addEventListener('click', () => navBack());
+
   applyTheme();                // re-assert saved theme + sync the address-bar colour
   if (window.matchMedia) {     // keep "System" theme live if the OS flips light/dark
     try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (settings.theme === 'system') applyTheme(); }); } catch (e) { }
   }
   refreshAccountUI();
   snapshotBadges();            // baseline so existing progress doesn't fire "unlocked" toasts on load
+  // Daily streak: this open counts today as active — extend/reset it before the
+  // first render. Snapshot came first, so a streak badge crossed right now still
+  // celebrates (checkBadges toasts it, replacing the plain streak toast).
+  if (touchStreak()) { save(); streakToast(); checkBadges(); }
   initScrollbar();
   resubscribeAllShared();      // resume live sync for any lists shared on this device
   showHome(false);
@@ -2296,7 +2538,7 @@ function init() {
     const CApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
     if (CApp && typeof CApp.addListener === 'function') {
       CApp.addListener('backButton', () => {
-        if (sheetOpen() || view.name === 'detail') navBack();
+        if (sheetOpen() || view.name !== 'home') navBack();
         else CApp.exitApp();
       });
     }
@@ -2313,6 +2555,7 @@ function init() {
     }
   } catch (e) { }
   checkForceUpdate();
+  handleShortcutParams();      // pinned app shortcuts: ?new=1 / ?streak=1 / ?joincode=1
   handleJoinLink();            // opened from a shared ?join=CODE link → join + open the list
 }
 try { init(); } catch (err) { showFatal(err); }

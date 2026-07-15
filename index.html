@@ -17,8 +17,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <!-- Apply the saved theme before paint (external file = CSP-safe, no inline) -->
-  <script src="theme.js?v=51"></script>
-  <link rel="stylesheet" href="app.css?v=51">
+  <script src="theme.js?v=52"></script>
+  <link rel="stylesheet" href="app.css?v=52">
 </head>
 <body>
 <noscript><div style="padding:40px;font-family:system-ui">QuickList needs JavaScript to run.</div></noscript>
@@ -29,7 +29,10 @@
     <header class="home-head">
       <div>
         <h1 class="wordmark">Quick<span class="wm-2">list</span><span class="blob"></span></h1>
-        <p class="home-sub" id="home-sub"></p>
+        <div class="home-sub-row">
+          <p class="home-sub" id="home-sub"></p>
+          <button class="streak-chip" id="streak-btn" aria-label="Daily streak" hidden><span class="fl">🔥</span><b id="streak-n">1</b></button>
+        </div>
       </div>
       <div class="head-actions">
         <button class="icon-btn" id="achv-btn" aria-label="Badges and ranking"></button>
@@ -76,9 +79,11 @@
 
     <div class="addbar-wrap">
       <p class="voice-hint" id="voice-hint"></p>
+      <div class="fmt-colors" id="fmt-colors" hidden></div>
       <div class="fmt-bar" role="toolbar" aria-label="Text formatting">
         <button type="button" class="fmt-btn" data-fmt="bold" aria-label="Bold"><b>B</b></button>
         <button type="button" class="fmt-btn" data-fmt="underline" aria-label="Underline"><u>U</u></button>
+        <button type="button" class="fmt-btn" data-fmt="color" aria-label="Text colour"><span class="fmt-a">A</span></button>
         <span class="fmt-hint">Select text, then tap</span>
       </div>
       <form id="addbar">
@@ -91,13 +96,22 @@
     </div>
   </section>
 
+  <!-- ============ STREAK ============ -->
+  <section id="page-streak" class="page" hidden>
+    <header class="streak-head">
+      <button class="icon-btn" id="streak-back" aria-label="Back"></button>
+      <h2>Daily streak</h2>
+    </header>
+    <div id="streak-body"></div>
+  </section>
+
   <!-- ============ CHROME ============ -->
   <div id="backdrop" hidden></div>
   <div id="scrollbar" aria-hidden="true"><div id="scrollthumb"></div></div>
   <div id="sheet-root"></div>
   <div id="toast-root"></div>
 </div>
-<script src="config.js?v=51"></script>
-<script src="app.js?v=51"></script>
+<script src="config.js?v=52"></script>
+<script src="app.js?v=52"></script>
 </body>
 </html>

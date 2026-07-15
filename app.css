@@ -184,6 +184,22 @@ svg { display: block; }
   background: conic-gradient(from .25turn, #F2555A, #F2883E, #E8A917, #86B93A, #21A971, #2E97E8, #5A63E0, #9457D6, #E25CA6, #F2555A);
 }
 .home-sub { font-size: 13px; font-weight: 500; color: var(--ink-3); margin-top: 1px; }
+.home-sub-row { display: flex; align-items: center; gap: 8px; min-height: 20px; }
+
+/* daily streak chip (Duolingo-style flame) — lives under the wordmark, taps
+   open the streak sheet. Pops once whenever the count goes up for the day. */
+.streak-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 9px 2px 6px; border-radius: var(--r-pill);
+  background: linear-gradient(135deg, #FF9D2E, #F2555A);
+  color: #fff; font-weight: 800; font-size: 12.5px; line-height: 1.4;
+  box-shadow: 0 2px 8px rgba(242, 105, 68, .35);
+  transition: transform .14s var(--ease-spring);
+}
+.streak-chip:active { transform: scale(.92); }
+.streak-chip .fl { font-size: 12px; line-height: 1; }
+.streak-chip.pop { animation: streak-pop .55s var(--ease-spring); }
+@keyframes streak-pop { 0% { transform: scale(.5); } 60% { transform: scale(1.22); } 100% { transform: scale(1); } }
 
 /* search */
 .search-wrap {
@@ -452,6 +468,9 @@ svg { display: block; }
 .item.done .check { background: var(--c); border-color: var(--c); animation: tick .3s var(--ease-spring); }
 .item.done .check .tk { stroke-dashoffset: 0; }
 .item.done .item-text { color: var(--ink-3); }
+/* checked-off rows mute custom text colours too, so "done" always reads as done
+   (!important beats the inline style the colour marker renders to) */
+.item.done .item-text .tx span[style] { color: inherit !important; }
 .item.done .item-text .tx::after { transform: scaleX(1); }
 .item.done .qty { background: var(--ink-3); }
 @keyframes tick { 45% { transform: scale(1.2); } }
@@ -537,7 +556,24 @@ body.fmt-on .fmt-bar { display: flex; }
 .fmt-btn b { font-weight: 800; }
 .fmt-btn u { text-underline-offset: 2px; }
 .fmt-btn:active { transform: scale(.9); background: var(--surface-2); }
+.fmt-btn .fmt-a {
+  font-weight: 800; line-height: 1; padding: 0 2px 2px;
+  border-bottom: 3px solid;
+  border-image: linear-gradient(90deg, #F2555A, #E8A917, #21A971, #2E97E8, #9457D6) 1;
+}
 .fmt-hint { font-size: 11.5px; font-weight: 600; color: var(--ink-3); margin-left: 2px; }
+
+/* text-colour swatches — a second accessory row the "A" button toggles open */
+.fmt-colors { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 0 6px 9px; pointer-events: auto; }
+body:not(.fmt-on) .fmt-colors { display: none; }   /* never without its toolbar */
+.fmt-swatch {
+  width: 27px; height: 27px; flex: 0 0 27px; border-radius: 50%;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #000 10%, transparent);
+  transition: transform .12s var(--ease-spring);
+}
+.fmt-swatch:active { transform: scale(.82); }
+.fmt-swatch.clear { background: var(--surface); color: var(--ink-2); display: grid; place-items: center; box-shadow: var(--shadow-1); }
+.fmt-swatch.clear svg { width: 14px; height: 14px; }
 #addbar {
   display: flex; align-items: center; gap: 8px;
   background: var(--surface); border-radius: var(--r-pill);
@@ -830,6 +866,61 @@ body.view-home #scrollbar {
 .badge-card.earned .badge-prog { display: none; }
 .badge-check { position: absolute; top: 11px; right: 11px; width: 20px; height: 20px; border-radius: 50%; background: var(--c); color: #fff; display: grid; place-items: center; }
 .badge-check svg { width: 13px; height: 13px; }
+
+/* ============================================================ streak page */
+#page-streak {
+  animation: slide-in .3s var(--ease-out);
+  height: 100dvh;
+  overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  scrollbar-width: none;
+  padding-bottom: calc(30px + env(safe-area-inset-bottom, 0px));
+}
+#page-streak::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.streak-head { display: flex; align-items: center; gap: 13px; margin: 2px 0 16px; }
+.streak-head .icon-btn { background: var(--surface); }
+.streak-head h2 { font-family: var(--font-display); font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
+
+.streak-hero { text-align: center; padding: 10px 0 2px; }
+.streak-flame { font-size: 62px; line-height: 1; animation: streak-pop .55s var(--ease-spring); }
+.streak-count { font-family: var(--font-display); font-size: 32px; font-weight: 800; letter-spacing: -.03em; margin-top: 10px; }
+.streak-best { font-size: 13px; font-weight: 600; color: var(--ink-3); margin-top: 2px; }
+.streak-week { display: flex; justify-content: center; gap: 9px; margin: 18px 0 6px; }
+.streak-day { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 800; text-transform: uppercase; color: var(--ink-3); }
+.streak-day i { width: 30px; height: 30px; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; font-style: normal; font-size: 14px; }
+.streak-day.lit i { background: linear-gradient(135deg, #FF9D2E, #F2555A); box-shadow: 0 2px 8px rgba(242, 105, 68, .35); }
+.streak-day.lit { color: var(--ink-2); }
+.streak-hint { text-align: center; font-size: 13px; color: var(--ink-2); line-height: 1.5; margin: 10px 8px 0; }
+
+.streak-stats { display: flex; gap: 10px; margin: 18px 0 4px; }
+.streak-stats > div { flex: 1; text-align: center; background: var(--surface); box-shadow: var(--shadow-1); border-radius: 15px; padding: 13px 6px 11px; }
+.streak-stats b { display: block; font-family: var(--font-display); font-size: 21px; font-weight: 800; letter-spacing: -.02em; }
+.streak-stats span { font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--ink-3); }
+
+/* widget previews — sized and rounded like real Android home-screen widgets */
+.widget-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.widget {
+  border-radius: 24px; padding: 16px 12px; min-height: 128px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: var(--surface); box-shadow: var(--shadow-1); text-align: center;
+}
+.wf-lab { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+.w-flame { background: linear-gradient(150deg, #FF9D2E, #F2555A); color: #fff; }
+.w-flame .wf-fl { font-size: 28px; line-height: 1; }
+.w-flame b { font-family: var(--font-display); font-size: 36px; font-weight: 800; line-height: 1.1; }
+.w-flame .wf-lab { color: rgba(255, 255, 255, .88); }
+.ring-wrap { position: relative; width: 76px; height: 76px; }
+.ring-wrap svg { width: 76px; height: 76px; transform: rotate(-90deg); }
+.ring-bg { fill: none; stroke: var(--surface-2); stroke-width: 7; }
+.ring-fg { fill: none; stroke: #F2883E; stroke-width: 7; stroke-linecap: round; }
+.ring-mid { position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; }
+.w-week { grid-column: 1 / -1; padding: 14px 12px; }
+.ww-title { font-family: var(--font-display); font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
+.w-week .streak-week { margin: 8px 0 6px; }
+.widget-note { font-size: 12px; color: var(--ink-3); line-height: 1.5; margin: 12px 4px 0; }
+
+/* soft "update available" sheet */
+.upd-hero { text-align: center; font-size: 52px; line-height: 1; padding: 8px 0 12px; }
 
 /* ============================================================ ranking */
 .rank-list { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 2px; }
