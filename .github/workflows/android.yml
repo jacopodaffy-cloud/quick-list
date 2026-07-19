@@ -97,6 +97,9 @@ jobs:
           RES=android/app/src/main/res
           mkdir -p "$PKG" "$RES/layout" "$RES/xml" "$RES/drawable" "$RES/values" "$RES/values-night"
 
+          # NOTE: the widget receiver must be android:exported="true" — the system
+          # launcher (a different process) sends APPWIDGET_UPDATE and reads the
+          # provider to show it in the widget picker. exported="false" hides it.
           cat > "$PKG/QuickListWidget.java" <<'EOF'
           package app.quicklist.twa;
 
@@ -236,7 +239,7 @@ jobs:
           python3 - <<'PY'
           p = 'android/app/src/main/AndroidManifest.xml'
           s = open(p).read()
-          rec = '''        <receiver android:name=".QuickListWidget" android:exported="false" android:label="QuickList">
+          rec = '''        <receiver android:name=".QuickListWidget" android:exported="true" android:label="QuickList">
                   <intent-filter>
                       <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                   </intent-filter>
@@ -277,6 +280,20 @@ jobs:
           cat android/variables.gradle
           echo "=== versionCode ==="
           grep versionCode android/app/build.gradle
+          # Harden the Gradle wrapper download. The default -all distribution is
+          # ~200MB and the wrapper's network timeout is only 10s, so on a slow
+          # runner the "Downloading gradle-8.x-all.zip" step times out and the
+          # whole build fails before it compiles anything (a transient CI flake,
+          # not an app problem). Use the smaller -bin distribution and a 120s
+          # timeout so a slow download retries/waits instead of aborting.
+          WP=android/gradle/wrapper/gradle-wrapper.properties
+          sed -i 's#-all\.zip#-bin.zip#' "$WP"
+          if grep -q '^networkTimeout' "$WP"; then
+            sed -i 's/^networkTimeout=.*/networkTimeout=120000/' "$WP"
+          else
+            echo 'networkTimeout=120000' >> "$WP"
+          fi
+          echo "=== gradle-wrapper.properties ===" ; cat "$WP"
 
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | python3 -c "import sys,base64; open('android/app/quicklist-release.keystore','wb').write(base64.b64decode(sys.stdin.read().strip()))"
