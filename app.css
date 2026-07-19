@@ -416,6 +416,13 @@ svg { display: block; }
   animation: item-in .26s var(--ease-out) backwards;
 }
 @keyframes item-in { from { transform: translateY(8px); } }
+/* per-item container colour — the whole card takes the chosen hue as a readable
+   tint (stronger in dark so it stays visible on the dark surface) */
+.item.tinted { background: color-mix(in srgb, var(--bg) 20%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bg) 28%, transparent), var(--shadow-1); }
+:root[data-theme="dark"] .item.tinted { background: color-mix(in srgb, var(--bg) 30%, var(--surface)); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .item.tinted { background: color-mix(in srgb, var(--bg) 30%, var(--surface)); }
+}
 .item.dragging { box-shadow: var(--shadow-lift); z-index: 5; transition: none !important; cursor: grabbing; }
 .item.shift { transition: transform .18s var(--ease-out); }
 .item.removing { transition: transform .2s var(--ease-out), opacity .2s; transform: translateX(-110%); opacity: 0; }
@@ -441,6 +448,8 @@ svg { display: block; }
 .check .tk { stroke-dasharray: 24; stroke-dashoffset: 24; transition: stroke-dashoffset .22s ease .03s; }
 .check:active { transform: scale(.82); }
 
+/* text + meta chips stack in a column; the column takes the row's free width */
+.item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .item-text {
   flex: 1; min-width: 0;
   font-size: 15.5px; font-weight: 500;
@@ -448,6 +457,18 @@ svg { display: block; }
   cursor: text; overflow-wrap: anywhere;
   touch-action: pan-y;   /* vertical scroll always works; horizontal swipe handled in JS */
 }
+.item-main:has(.item-meta) .item-text { padding-bottom: 3px; }
+.item-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 0 4px 10px 0; }
+.pri-flag, .due-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: -.01em;
+  padding: 2.5px 9px; border-radius: var(--r-pill);
+}
+.pri-flag { color: var(--pc); background: color-mix(in srgb, var(--pc) 13%, var(--surface-2)); }
+.due-chip { color: var(--ink-2); background: var(--surface-2); }
+.due-chip.over { color: #E5484D; background: rgba(229, 72, 77, .13); }
+.pri-flag svg, .due-chip svg { width: 11px; height: 11px; }
+.item.done .item-meta { opacity: .5; }
 .item-text .tx { position: relative; }
 .item-text .tx strong { font-weight: 800; }
 .item-text .tx u { text-decoration-thickness: 2px; text-underline-offset: 2px; }
@@ -480,6 +501,9 @@ svg { display: block; }
   font-size: 15.5px; font-weight: 500;
   background: var(--tint-2); border: 0; border-radius: 10px;
   padding: 10px 12px; margin: 6px 4px 6px 0;
+  cursor: text; white-space: pre-wrap; overflow-wrap: anywhere;
+  caret-color: var(--c);
+  -webkit-user-select: text; user-select: text;
 }
 .item-edit:focus { outline: 2px solid var(--c); }
 
@@ -556,12 +580,18 @@ body.fmt-on .fmt-bar { display: flex; }
 .fmt-btn b { font-weight: 800; }
 .fmt-btn u { text-underline-offset: 2px; }
 .fmt-btn:active { transform: scale(.9); background: var(--surface-2); }
+/* lit while the caret/selection carries that style — like a real editor */
+.fmt-btn.on { background: var(--ink); color: var(--canvas); }
 .fmt-btn .fmt-a {
   font-weight: 800; line-height: 1; padding: 0 2px 2px;
   border-bottom: 3px solid;
   border-image: linear-gradient(90deg, #F2555A, #E8A917, #21A971, #2E97E8, #9457D6) 1;
 }
-.fmt-hint { font-size: 11.5px; font-weight: 600; color: var(--ink-3); margin-left: 2px; }
+/* the container-colour (fill) button: a little card wearing the palette */
+.fmt-btn .fmt-fill {
+  width: 17px; height: 14px; border-radius: 5px;
+  background: linear-gradient(135deg, #F2555A, #E8A917, #21A971, #2E97E8, #9457D6);
+}
 
 /* text-colour swatches — a second accessory row the "A" button toggles open */
 .fmt-colors { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 0 6px 9px; pointer-events: auto; }
@@ -579,9 +609,29 @@ body:not(.fmt-on) .fmt-colors { display: none; }   /* never without its toolbar 
   background: var(--surface); border-radius: var(--r-pill);
   box-shadow: var(--shadow-2); padding: 7px 7px 7px 18px;
 }
-#add-input { flex: 1; min-width: 0; border: 0; background: transparent; font-size: 16px; font-weight: 500; padding: 10px 0; }
+/* composer preview of the pending container colour — WYSIWYG for the next item */
+#addbar.tinted { background: color-mix(in srgb, var(--bg) 20%, var(--surface)); }
+:root[data-theme="dark"] #addbar.tinted { background: color-mix(in srgb, var(--bg) 30%, var(--surface)); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) #addbar.tinted { background: color-mix(in srgb, var(--bg) 30%, var(--surface)); }
+}
+/* The composer is a contenteditable rich-text surface (true WYSIWYG): what you
+   see while typing — bold, underline, colour — is exactly what the item becomes. */
+#add-input {
+  flex: 1; min-width: 0;
+  border: 0; background: transparent;
+  font-size: 16px; font-weight: 500;
+  padding: 10px 0;
+  max-height: 96px; overflow-y: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  caret-color: var(--c);
+  -webkit-user-select: text; user-select: text;
+}
 #add-input:focus { outline: none; }
-#add-input::placeholder { color: var(--ink-3); }
+#add-input:empty::before { content: attr(data-ph); color: var(--ink-3); pointer-events: none; }
+/* live formatting inside the editors renders exactly like the saved rows */
+#add-input b, #add-input strong, .item-edit b, .item-edit strong { font-weight: 800; }
+#add-input u, .item-edit u { text-decoration-thickness: 2px; text-underline-offset: 2px; }
 
 .mic-btn, .img-btn {
   width: 44px; height: 44px; flex: 0 0 44px;
@@ -606,6 +656,69 @@ body:not(.fmt-on) .fmt-colors { display: none; }   /* never without its toolbar 
 .add-send[disabled] { opacity: .4; pointer-events: none; }
 
 .voice-hint { text-align: center; font-size: 12.5px; font-weight: 600; color: var(--deep); padding: 0 0 8px; height: 20px; }
+
+/* ============================================================ item metadata pickers */
+/* priority cells — a row of labelled flags the flag button toggles open */
+.pri-cell {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 13px; border-radius: var(--r-pill);
+  background: var(--surface); box-shadow: var(--shadow-1);
+  font-size: 12.5px; font-weight: 700;
+  color: var(--pc, var(--ink-2));
+  transition: transform .12s var(--ease-spring);
+}
+.pri-cell:active { transform: scale(.92); }
+.pri-cell svg { width: 13px; height: 13px; }
+.pri-cell.none { color: var(--ink-2); }
+
+/* pending chips — what the NEXT item will carry (tap a chip to remove it) */
+#pend-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0 6px 8px; pointer-events: auto; }
+.pend-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 11px; border-radius: var(--r-pill);
+  background: var(--surface); box-shadow: var(--shadow-1);
+  font-size: 12px; font-weight: 700;
+  color: var(--pc, var(--ink-2));
+  transition: transform .12s var(--ease-spring);
+}
+.pend-chip:active { transform: scale(.92); }
+.pend-chip svg { width: 12px; height: 12px; }
+.pend-chip svg:last-child { opacity: .55; }
+
+/* due sheet: date-time input + set button side by side */
+.due-form { display: flex; gap: 8px; align-items: stretch; }
+.due-form .field { flex: 1; min-width: 0; }
+
+/* ============================================================ home footer (archive & trash) */
+.home-foot { display: flex; gap: 10px; padding: 14px 0 4px; }
+.foot-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 13px 10px; border-radius: 16px;
+  background: var(--surface); box-shadow: var(--shadow-1);
+  font-size: 13px; font-weight: 700; color: var(--ink-2);
+  transition: transform .12s var(--ease-out);
+}
+.foot-btn:active { transform: scale(.97); }
+.foot-btn svg { width: 16px; height: 16px; }
+.foot-btn b { color: var(--ink); }
+
+/* archived / recently-deleted sheet rows */
+.al-list { max-height: 52vh; overflow-y: auto; }
+.al-row { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--line); }
+.al-row:last-child { border-bottom: 0; }
+.al-dot { width: 14px; height: 14px; flex: 0 0 14px; border-radius: 50%; }
+.al-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.al-title { font-weight: 700; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.al-sub { font-size: 12px; color: var(--ink-2); }
+.al-act {
+  width: 38px; height: 38px; flex: 0 0 38px;
+  display: grid; place-items: center;
+  border-radius: 12px; background: var(--surface-2); color: var(--ink-2);
+  transition: transform .12s var(--ease-spring);
+}
+.al-act:active { transform: scale(.9); }
+.al-act.danger { color: #E5484D; }
+.al-act svg { width: 16px; height: 16px; }
 
 /* ============================================================ custom scrollbar
    Minimal, always-visible, grabbable thumb on the right edge of the list.

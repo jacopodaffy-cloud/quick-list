@@ -21,7 +21,7 @@
 // Keep in lockstep with versionCode in .github/workflows/android.yml — bump BOTH
 // every release (see PRD "Bump every release"), or installed apps stop noticing
 // new versions.
-const APP_VERSION_CODE = 53;
+const APP_VERSION_CODE = 55;
 
 // The public home of the web app — used for the update wall and for share links
 // (inside the APK location.origin is https://localhost, never usable in a link).
@@ -181,6 +181,11 @@ const I = {
   link: ic('<path d="M9 15l6-6"/><path d="M11 6.5l1.2-1.2a3.5 3.5 0 0 1 5 5L16 11.5"/><path d="M13 17.5l-1.2 1.2a3.5 3.5 0 0 1-5-5L8 12.5"/>'),
   camera: ic('<path d="M3 8.5A2 2 0 0 1 5 6.5h1.5l1-1.8a1.5 1.5 0 0 1 1.3-.7h4.4a1.5 1.5 0 0 1 1.3.7l1 1.8H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><circle cx="12" cy="13" r="3.3"/>'),
   image: ic('<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="m4 18 5-5 4 4 3-3 4 4"/>'),
+  flag: ic('<path d="M5 21V4"/><path d="M5 4h11l-2.5 4L16 12H5"/>'),
+  cal: ic('<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/>'),
+  bell: ic('<path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2.2 2.2 0 0 0 4 0"/>'),
+  box: ic('<path d="M3 8l2-4h14l2 4"/><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M10 12h4"/>'),
+  restore: ic('<path d="M3 12a9 9 0 1 0 2.64-6.36"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/>'),
 };
 const GOOGLE_G = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M22.5 12.2c0-.68-.06-1.36-.18-2.02H12v3.83h5.9a5.05 5.05 0 0 1-2.19 3.31v2.74h3.54c2.07-1.91 3.25-4.72 3.25-7.86z"/><path fill="#34A853" d="M12 23c2.94 0 5.42-.97 7.23-2.64l-3.54-2.74c-.98.66-2.24 1.05-3.69 1.05-2.84 0-5.25-1.92-6.11-4.5H2.23v2.83A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.89 14.17a6.6 6.6 0 0 1 0-4.34V7H2.23a11 11 0 0 0 0 9.99l3.66-2.82z"/><path fill="#EA4335" d="M12 4.75c1.6 0 3.04.55 4.18 1.62l3.13-3.13C17.42 1.46 14.94.5 12 .5A11 11 0 0 0 2.23 7l3.66 2.83C6.75 6.67 9.16 4.75 12 4.75z"/></svg>';
 
@@ -253,7 +258,9 @@ const dataKeyFor = uid => 'quicklist.data.' + uid;
 const activeKey = () => session ? dataKeyFor(session.uid) : KEY;
 
 const newStats = () => ({ created: 0, completed: 0, checked: 0, streak: 0, bestStreak: 0, streakDay: '', since: Date.now() });
-function blank() { return { v: 1, lists: [], nextColor: 0, sort: 'recent', filterColor: null, stats: newStats(), updatedAt: Date.now() }; }
+function blank() { return { v: 1, lists: [], trash: [], nextColor: 0, sort: 'recent', filterColor: null, stats: newStats(), updatedAt: Date.now() }; }
+const TRASH_DAYS = 30, TRASH_MAX = 50;
+const trashFresh = t => Number.isFinite(t.deletedAt) && Date.now() - t.deletedAt < TRASH_DAYS * 864e5;
 const validColor = c => (PALETTE.some(p => p.hex === c) ? c : PALETTE[0].hex);
 const cleanId = id => (typeof id === 'string' && /^[\w-]{1,40}$/.test(id)) ? id : uid();
 function normStats(st) {
@@ -269,6 +276,34 @@ function normStats(st) {
 }
 /* Deep sanitiser — every state that enters the app (storage, cloud pull,
    shared link, merge) passes through here: malformed dropped, oversized clamped. */
+function normList(l) {
+  return {
+    id: cleanId(l.id),
+    title: cleanText(l.title, MAX.title),
+    color: validColor(l.color),
+    pinned: !!l.pinned,
+    tidy: !!l.tidy,
+    archived: !!l.archived,
+    code: (typeof l.code === 'string' && /^[A-Z0-9]{4,10}$/.test(l.code)) ? l.code : null,
+    shared: !!(l.shared && typeof l.code === 'string' && /^[A-Z0-9]{4,10}$/.test(l.code)),
+    createdAt: Number.isFinite(l.createdAt) ? l.createdAt : Date.now(),
+    updatedAt: Number.isFinite(l.updatedAt) ? l.updatedAt : Date.now(),
+    items: l.items.slice(0, MAX.items)
+      .filter(i => i && typeof i === 'object')
+      .map(i => ({
+        id: cleanId(i.id),
+        text: cleanText(i.text, MAX.item),
+        done: !!i.done,
+        qty: (Number.isFinite(i.qty) && i.qty > 1) ? Math.min(999, Math.floor(i.qty)) : null,
+        img: isImgData(i.img) ? i.img : null,
+        bg: (typeof i.bg === 'string' && /^#[0-9A-Fa-f]{6}$/.test(i.bg)) ? i.bg : null,
+        pri: [1, 2, 3, 4].includes(i.pri) ? i.pri : null,
+        due: (Number.isFinite(i.due) && i.due > 0) ? Math.floor(i.due) : null,
+        rem: !!(i.rem && i.due),
+      }))
+      .filter(i => i.text.length > 0 || i.img),   // keep image-only items
+  };
+}
 function normalize(s) {
   if (!s || typeof s !== 'object' || !Array.isArray(s.lists)) return null;
   const out = {
@@ -280,27 +315,12 @@ function normalize(s) {
     updatedAt: Number.isFinite(s.updatedAt) ? s.updatedAt : Date.now(),
     lists: s.lists.slice(0, MAX.lists)
       .filter(l => l && typeof l === 'object' && Array.isArray(l.items))
-      .map(l => ({
-        id: cleanId(l.id),
-        title: cleanText(l.title, MAX.title),
-        color: validColor(l.color),
-        pinned: !!l.pinned,
-        tidy: !!l.tidy,
-        code: (typeof l.code === 'string' && /^[A-Z0-9]{4,10}$/.test(l.code)) ? l.code : null,
-        shared: !!(l.shared && typeof l.code === 'string' && /^[A-Z0-9]{4,10}$/.test(l.code)),
-        createdAt: Number.isFinite(l.createdAt) ? l.createdAt : Date.now(),
-        updatedAt: Number.isFinite(l.updatedAt) ? l.updatedAt : Date.now(),
-        items: l.items.slice(0, MAX.items)
-          .filter(i => i && typeof i === 'object')
-          .map(i => ({
-            id: cleanId(i.id),
-            text: cleanText(i.text, MAX.item),
-            done: !!i.done,
-            qty: (Number.isFinite(i.qty) && i.qty > 1) ? Math.min(999, Math.floor(i.qty)) : null,
-            img: isImgData(i.img) ? i.img : null,
-          }))
-          .filter(i => i.text.length > 0 || i.img),   // keep image-only items
-      })),
+      .map(normList),
+    // Recently deleted: full lists parked for 30 days, then purged on load.
+    trash: (Array.isArray(s.trash) ? s.trash : [])
+      .filter(t => t && typeof t === 'object' && Array.isArray(t.items) && trashFresh(t))
+      .slice(0, TRASH_MAX)
+      .map(t => ({ ...normList(t), deletedAt: Math.floor(t.deletedAt) })),
   };
   return out;
 }
@@ -323,9 +343,11 @@ function save() {
   writeData(activeKey(), state);
   schedulePush();                          // account cloud push (no-op unless signed into cloud)
   for (const l of state.lists) if (l.shared && l.code) schedulePushShared(l);   // collaborative lists
+  scheduleRemindersSoon();                 // keep scheduled notifications in step with the data
 }
 
-const mkItem = (text, done = false, qty = null, img = null) => ({ id: uid(), text: cleanText(text, MAX.item), done: !!done, qty: qty && qty > 1 ? Math.min(999, Math.floor(qty)) : null, img: isImgData(img) ? img : null });
+const isBgHex = s => typeof s === 'string' && /^#[0-9A-Fa-f]{6}$/.test(s);
+const mkItem = (text, done = false, qty = null, img = null, bg = null) => ({ id: uid(), text: cleanText(text, MAX.item), done: !!done, qty: qty && qty > 1 ? Math.min(999, Math.floor(qty)) : null, img: isImgData(img) ? img : null, bg: isBgHex(bg) ? bg : null, pri: null, due: null, rem: false });
 function mkList(color) {
   return { id: uid(), title: '', color: color || nextColor(), items: [], pinned: false, tidy: false, createdAt: Date.now(), updatedAt: Date.now() };
 }
@@ -341,13 +363,55 @@ function createList() {
 }
 function deleteList(id) {
   const i = state.lists.findIndex(l => l.id === id); if (i < 0) return;
-  const [removed] = state.lists.splice(i, 1); save();
+  const [removed] = state.lists.splice(i, 1);
+  // Safety net: deleted lists rest in "Recently deleted" for 30 days before
+  // they're really gone — Undo on the toast is instant, the trash is the slow lane.
+  if (removed.code) unsubscribeShared(removed.code);
+  if (!state.trash) state.trash = [];
+  state.trash.unshift({ ...removed, deletedAt: Date.now() });
+  state.trash = state.trash.slice(0, TRASH_MAX);
+  save();
   if (view.name === 'detail' && view.id === id) showHome(false); else renderHome();
-  toast('List deleted', 'Undo', () => { state.lists.splice(i, 0, removed); save(); rerender(); });
+  toast('List deleted', 'Undo', () => {
+    const t = state.trash.findIndex(x => x.id === id);
+    if (t >= 0) state.trash.splice(t, 1);
+    state.lists.splice(Math.min(i, state.lists.length), 0, removed);
+    if (removed.shared && removed.code) subscribeShared(removed);
+    save(); rerender();
+  });
+}
+function archiveList(id) {
+  const l = getList(id); if (!l) return;
+  l.archived = true; touch(l); save();
+  if (view.name === 'detail' && view.id === id) showHome(false); else rerender();
+  toast('List archived', 'Undo', () => { l.archived = false; touch(l); save(); rerender(); });
+}
+function unarchiveList(id) {
+  const l = getList(id); if (!l) return;
+  l.archived = false; touch(l); save(); rerender();
+  toast('Back on your home screen');
+}
+function restoreTrash(id) {
+  const t = (state.trash || []).findIndex(x => x.id === id); if (t < 0) return;
+  const [rec] = state.trash.splice(t, 1);
+  const { deletedAt, ...list } = rec;
+  list.archived = false; list.updatedAt = Date.now();
+  state.lists.unshift(list);
+  if (list.shared && list.code) subscribeShared(list);
+  save(); rerender();
+  toast('List restored');
+}
+function purgeTrash(id) {
+  const t = (state.trash || []).findIndex(x => x.id === id); if (t < 0) return;
+  state.trash.splice(t, 1); save();
+  toast('Deleted forever');
 }
 function duplicateList(id) {
   const src = getList(id); if (!src) return;
-  const copy = { ...src, id: uid(), pinned: false, title: src.title ? src.title + ' copy' : '', items: src.items.map(it => mkItem(it.text, it.done, it.qty)), createdAt: Date.now(), updatedAt: Date.now() };
+  // Copy EVERY item field (a dropped argument here once silently lost photos on
+  // duplicate). The copy is always PRIVATE: spreading src would carry code/shared
+  // over, and two local lists pushing to the same shared/{code} doc fight forever.
+  const copy = { ...src, id: uid(), pinned: false, code: null, shared: false, title: src.title ? src.title + ' copy' : '', items: src.items.map(it => mkItem(it.text, it.done, it.qty, it.img, it.bg)), createdAt: Date.now(), updatedAt: Date.now() };
   state.lists.unshift(copy); bumpStat('created'); save(); checkBadges(); openDetailFromSheet(copy.id); toast('List duplicated');
 }
 function clearDone(id) {
@@ -960,6 +1024,22 @@ function mergeStates(primary, secondary) {
     const ex = map.get(l.id);
     if (!ex || (l.updatedAt || 0) > (ex.updatedAt || 0)) map.set(l.id, l);
   }
+  // Trash acts as a set of tombstones: a list deleted more recently than it was
+  // last edited stays deleted on every device (before this, the union-merge
+  // quietly resurrected lists you'd deleted elsewhere). A list edited AFTER the
+  // deletion (restored, or changed on a device that hadn't synced the delete)
+  // wins and leaves the trash.
+  const trashMap = new Map();
+  for (const t of [...(a.trash || []), ...(b.trash || [])]) {
+    if (!trashFresh(t)) continue;
+    const ex = trashMap.get(t.id);
+    if (!ex || (t.deletedAt || 0) > (ex.deletedAt || 0)) trashMap.set(t.id, t);
+  }
+  for (const [id, l] of [...map]) {
+    const t = trashMap.get(id);
+    if (t && (t.deletedAt || 0) >= (l.updatedAt || 0)) map.delete(id);   // deletion is newer → stays deleted
+    else if (t) trashMap.delete(id);                                     // edit is newer → restored everywhere
+  }
   // Achievement counters are cumulative and monotonic — take the max across
   // devices so progress (points/badges) is never lost or double-counted on sync.
   const sa = normStats(a.stats), sb = normStats(b.stats);
@@ -979,6 +1059,7 @@ function mergeStates(primary, secondary) {
   return {
     ...a,
     lists: [...map.values()].sort((x, y) => (y.updatedAt || 0) - (x.updatedAt || 0)),
+    trash: [...trashMap.values()].sort((x, y) => (y.deletedAt || 0) - (x.deletedAt || 0)).slice(0, TRASH_MAX),
     stats,
     nextColor: Math.max(a.nextColor || 0, b.nextColor || 0),
     updatedAt: Date.now(),
@@ -1503,7 +1584,9 @@ function showDetail(id, push = true) {
   $('#page-streak').hidden = true;
   const d = $('#page-detail'); d.hidden = false;
   d.style.animation = 'none'; void d.offsetWidth; d.style.animation = '';
-  $('#add-input').value = ''; syncSend();
+  edClear(edEl()); pendingBg = null; applyAddbarBg();
+  pendingPri = null; pendingDue = null; pendingRem = false; renderPendChips();
+  syncSend();
   document.body.classList.remove('fmt-on', 'view-home', 'view-streak');
   document.body.classList.add('view-detail');
   renderDetail();
@@ -1536,7 +1619,7 @@ const progress = l => { const t = l.items.length; return t ? l.items.filter(i =>
 
 // home ordering: pinned first, then chosen sort; with text + colour filters
 function homeView() {
-  let ls = state.lists.slice();
+  let ls = state.lists.filter(l => !l.archived);   // archived lists live behind the footer
   if (state.filterColor) ls = ls.filter(l => l.color === state.filterColor);
   const q = norm(homeQuery);
   if (q) ls = ls.filter(l => norm(l.title).includes(q) || l.items.some(i => norm(i.text).includes(q)));
@@ -1604,12 +1687,41 @@ function ListCard(l) {
   </button>`;
 }
 
+/* Priority scale — colours picked from the identity palette so flags feel native */
+const PRI = {
+  1: { label: 'Low', color: '#2E97E8' },
+  2: { label: 'Medium', color: '#E8A917' },
+  3: { label: 'High', color: '#F2883E' },
+  4: { label: 'Urgent', color: '#F2555A' },
+};
+/* Short human date for due chips: Today 18:00 · Tomorrow · Fri · 12 Aug */
+function dueLabel(ts) {
+  const d = new Date(ts), now = new Date();
+  const sameDay = (a, b) => a.toDateString() === b.toDateString();
+  const tom = new Date(now); tom.setDate(tom.getDate() + 1);
+  const hasTime = d.getHours() || d.getMinutes();
+  const time = hasTime ? ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '';
+  if (sameDay(d, now)) return 'Today' + time;
+  if (sameDay(d, tom)) return 'Tomorrow' + time;
+  const days = (d - now) / 864e5;
+  if (days > 0 && days < 6) return d.toLocaleDateString(undefined, { weekday: 'short' }) + time;
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+    + (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '') + time;
+}
+const itemMetaHTML = it => (it.pri || it.due) ? `<span class="item-meta">
+    ${it.pri ? `<span class="pri-flag" style="--pc:${PRI[it.pri].color}">${I.flag}${PRI[it.pri].label}</span>` : ''}
+    ${it.due ? `<span class="due-chip ${!it.done && it.due < Date.now() ? 'over' : ''}">${I.cal}${esc(dueLabel(it.due))}${it.rem ? I.bell : ''}</span>` : ''}
+  </span>` : '';
+
 function ItemRow(it) {
   return `<div class="item-wrap">
-    <div class="item ${it.done ? 'done' : ''}" data-id="${it.id}">
+    <div class="item ${it.done ? 'done' : ''}${it.bg ? ' tinted' : ''}" data-id="${it.id}"${it.bg ? ` style="--bg:${it.bg}"` : ''}>
       <span class="handle" data-handle aria-label="Drag to reorder">${I.grip}</span>
       <button class="check" data-check="${it.id}" role="checkbox" aria-checked="${it.done}" aria-label="${esc(stripFmt(it.text))}">${I.tick}</button>
-      <span class="item-text ${it.text ? '' : (it.img ? 'photo-only' : '')}" data-edit="${it.id}"><span class="tx">${fmtText(it.text)}</span></span>
+      <span class="item-main">
+        <span class="item-text ${it.text ? '' : (it.img ? 'photo-only' : '')}" data-edit="${it.id}"><span class="tx">${fmtText(it.text)}</span></span>
+        ${itemMetaHTML(it)}
+      </span>
       ${it.img ? `<button class="item-img" data-img="${it.id}" aria-label="View photo"><img src="${esc(it.img)}" alt="" loading="lazy"></button>` : ''}
       <button class="item-del" data-del="${it.id}" aria-label="Delete item">${I.trash}</button>
       ${it.qty > 1 ? `<button class="qty" data-qty="${it.id}" aria-label="Quantity ${it.qty}, tap to add one">×${it.qty}</button>` : ''}
@@ -1621,7 +1733,7 @@ function ItemRow(it) {
 function renderHome() {
   requestAnimationFrame(updateScrollbar);   // refresh the scrollbar thumb after the grid re-renders
   renderStreakChip();
-  const total = state.lists.length;
+  const total = state.lists.filter(l => !l.archived).length;
   const ls = homeView();
   const filtering = !!(homeQuery.trim() || state.filterColor);
   $('#home-sub').textContent = total
@@ -1629,6 +1741,7 @@ function renderHome() {
     : 'Tap + to start';
   $('#search-wrap').hidden = total === 0;
   $('#search-clear').hidden = !homeQuery;
+  renderHomeFoot();
 
   const grid = $('#grid');
   if (total === 0) {
@@ -1650,6 +1763,46 @@ function renderHome() {
   }
   grid.innerHTML = ls.map(ListCard).join('');
   [...grid.querySelectorAll('.card')].forEach((c, i) => c.style.animationDelay = Math.min(i * 35, 250) + 'ms');
+}
+/* Quiet footer under the grid: doors to Archived and Recently deleted. */
+function renderHomeFoot() {
+  const el = $('#home-foot'); if (!el) return;
+  const nArch = state.lists.filter(l => l.archived).length;
+  const nTrash = (state.trash || []).length;
+  el.innerHTML = (nArch || nTrash) ? `<div class="home-foot">
+    ${nArch ? `<button class="foot-btn" data-open-archived>${I.box}<span>Archived</span><b>${nArch}</b></button>` : ''}
+    ${nTrash ? `<button class="foot-btn" data-open-trash>${I.trash}<span>Recently deleted</span><b>${nTrash}</b></button>` : ''}
+  </div>` : '';
+}
+const listRowHTML = (l, actions) => `<div class="al-row">
+    <span class="al-dot" style="background:${l.color}"></span>
+    <span class="al-main">
+      <span class="al-title">${esc(titleOr(l) || 'Untitled')}</span>
+      <span class="al-sub">${l.items.length} ${l.items.length === 1 ? 'item' : 'items'}${l.sub ? ' · ' + esc(l.sub) : ''}</span>
+    </span>${actions}
+  </div>`;
+function openArchivedSheet() {
+  const archived = state.lists.filter(l => l.archived);
+  if (!archived.length) { closeSheet(); renderHome(); return; }
+  openSheet(`
+    <h2 class="sheet-title">Archived</h2>
+    <p class="sheet-sub">Out of the way, not gone — bring a list back whenever you need it.</p>
+    <div class="al-list">${archived.map(l => listRowHTML(l, `
+      <button class="al-act" data-act="unarchive" data-id="${l.id}" aria-label="Unarchive">${I.restore}</button>
+      <button class="al-act danger" data-act="delete" data-id="${l.id}" aria-label="Delete">${I.trash}</button>`)).join('')}
+    </div>`);
+}
+function openTrashSheet() {
+  const trash = state.trash || [];
+  if (!trash.length) { closeSheet(); renderHome(); return; }
+  const days = t => { const d = Math.floor((Date.now() - t.deletedAt) / 864e5); return d < 1 ? 'today' : d === 1 ? 'yesterday' : d + ' days ago'; };
+  openSheet(`
+    <h2 class="sheet-title">Recently deleted</h2>
+    <p class="sheet-sub">Kept for ${TRASH_DAYS} days, then removed forever.</p>
+    <div class="al-list">${trash.map(t => listRowHTML({ ...t, sub: 'Deleted ' + days(t) }, `
+      <button class="al-act" data-act="restore" data-id="${t.id}" aria-label="Restore">${I.restore}</button>
+      <button class="al-act danger" data-act="purge" data-id="${t.id}" aria-label="Delete forever">${I.trash}</button>`)).join('')}
+    </div>`);
 }
 
 /* ---- Detail view ---- */
@@ -1687,7 +1840,13 @@ let noAnim = false;
 /* ====================== 6a. Smart add / paste / quantity ====================== */
 const stripMarker = s => s.replace(/^\s*(?:[-*•·–—‣]|\d+[.)]|\[\s*[xX·]?\s*\])\s+/, '');
 function parseQty(text) {
-  let t = text, qty = null, m;
+  // WYSIWYG can leave formatting hugging the quantity token (select-all +
+  // underline → "__x2__"): unwrap markers around a pure qty token first, so the
+  // quantity still parses — styling on the qty pill has no meaning anyway.
+  let t = text
+    .replace(/(?:\*\*|__)+([x×]\d{1,3}|\d{1,3}\s*[x×])(?:\*\*|__)+/gi, '$1')
+    .replace(/\{c:#[0-9A-Fa-f]{6}\}([x×]\d{1,3}|\d{1,3}\s*[x×])\{\/c\}/gi, '$1');
+  let qty = null, m;
   if ((m = t.match(/(?:^|\s)[x×](\d{1,3})\b/i)) || (m = t.match(/\b(\d{1,3})\s*[x×](?=\s|$)/i))) {
     qty = clamp(parseInt(m[1], 10), 1, 999);
     t = (t.slice(0, m.index) + ' ' + t.slice(m.index + m[0].length)).replace(/\s{2,}/g, ' ').trim();
@@ -1704,8 +1863,18 @@ function addItems(raw) {
   // split on new lines first (preserves per-line markers), then commas within a line
   const parts = raw.split(/\r?\n/).flatMap(line => line.split(',')).map(s => s.trim()).filter(Boolean);
   let added = 0;
-  for (const p of parts) { const it = smartLine(p); if (it) { l.items.push(mkItem(it.text, it.done, it.qty)); added++; } }
+  for (const p of parts) {
+    const it = smartLine(p);
+    if (it) {
+      const m = mkItem(it.text, it.done, it.qty, null, pendingBg);
+      m.pri = pendingPri; m.due = pendingDue; m.rem = !!(pendingDue && pendingRem);
+      l.items.push(m); added++;
+    }
+  }
   if (!added) return;
+  // container colour stays sticky (the tinted bar shows it); priority and due
+  // date are one-shot — they belong to the item you just added
+  pendingPri = null; pendingDue = null; pendingRem = false; renderPendChips();
   if (l.tidy) tidySort(l);
   touch(l); save(); buzz(8); renderDetail();
   requestAnimationFrame(() => { const d = $('#page-detail'); if (d) d.scrollTo({ top: d.scrollHeight, behavior: 'smooth' }); updateScrollbar(); });
@@ -1718,7 +1887,7 @@ function bumpQty(id) {
   const b = document.querySelector(`.qty[data-qty="${id}"]`);
   if (b) { b.textContent = '×' + it.qty; b.style.transform = 'scale(1.25)'; setTimeout(() => b.style.transform = '', 130); }
 }
-function syncSend() { $('#add-send').disabled = !$('#add-input').value.trim(); }
+function syncSend() { $('#add-send').disabled = !edPlain(edEl()); }
 
 /* ====================== 6a-2. Photos on items ======================
    An item can hold an optional photo (with or without text). Images are
@@ -1770,12 +1939,12 @@ async function onImagePicked(file) {
       const it = l.items.find(i => i.id === target);
       if (it) { it.img = data; touch(l); save(); buzz(8); renderDetail(); return; }
     }
-    // new item: compose with any typed text
-    const raw = $('#add-input').value.trim();
+    // new item: compose with any typed text (formatting markers preserved)
+    const raw = editorValue(edEl()).trim();
     const parsed = raw ? smartLine(raw) : null;
-    l.items.push(mkItem(parsed ? parsed.text : '', parsed ? parsed.done : false, parsed ? parsed.qty : null, data));
+    l.items.push(mkItem(parsed ? parsed.text : '', parsed ? parsed.done : false, parsed ? parsed.qty : null, data, pendingBg));
     if (l.tidy) tidySort(l);
-    $('#add-input').value = ''; syncSend();
+    edClear(edEl()); syncSend();
     touch(l); save(); buzz(8); renderDetail();
     requestAnimationFrame(() => { const d = $('#page-detail'); if (d) d.scrollTo({ top: d.scrollHeight, behavior: 'smooth' }); updateScrollbar(); });
   } catch (e) { toast((e && e.message) || 'Could not add photo'); }
@@ -1822,13 +1991,13 @@ function toggleVoice() {
   rec.onresult = e => {
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript; }
-    $('#add-input').value = (finalText + interim).replace(/\s+/g, ' ').trimStart(); syncSend();
+    edSetText(edEl(), (finalText + interim).replace(/\s+/g, ' ').trimStart()); syncSend();
   };
   rec.onerror = ev => { $('#voice-hint').textContent = ev.error === 'not-allowed' ? 'Microphone access denied' : ''; };
   rec.onend = () => {
     listening = false; $('#mic').classList.remove('listening'); $('#voice-hint').textContent = '';
-    const txt = $('#add-input').value.trim();
-    if (txt) { addItems(txt); $('#add-input').value = ''; syncSend(); }
+    const txt = edPlain(edEl());
+    if (txt) { addItems(txt); edClear(edEl()); syncSend(); }
   };
   try { rec.start(); } catch (e) { }
 }
@@ -1989,17 +2158,28 @@ function beginEdit(itemId) {
   const it = l.items.find(i => i.id === itemId); if (!it) return;
   const span = document.querySelector(`.item-text[data-edit="${itemId}"]`); if (!span) return;
   const raw = it.text + (it.qty > 1 ? ` x${it.qty}` : '');
-  const input = document.createElement('input');
-  input.className = 'item-edit'; input.value = raw; input.maxLength = MAX.item + 8; input.setAttribute('aria-label', 'Edit item');
-  span.replaceWith(input); input.focus(); input.setSelectionRange(raw.length, raw.length);
+  // WYSIWYG: the editor shows the item's RENDERED formatting (bold/underline/
+  // colour live), never the markers. fmtText escapes first, so this innerHTML
+  // can only ever be the item's own safe markup.
+  const ed = document.createElement('div');
+  ed.className = 'item-edit'; ed.contentEditable = 'true';
+  ed.setAttribute('role', 'textbox'); ed.setAttribute('aria-label', 'Edit item');
+  ed.setAttribute('enterkeyhint', 'done'); ed.setAttribute('spellcheck', 'false');
+  ed.innerHTML = fmtText(raw);
+  span.replaceWith(ed); ed.focus(); placeCaretEnd(ed);
+  let cancelled = false;
   const commit = () => {
-    const v = input.value.trim();
-    if (!v) { const i = l.items.indexOf(it); if (i >= 0) l.items.splice(i, 1); }
+    if (cancelled) { noAnim = true; renderDetail(); return; }
+    const v = editorValue(ed).replace(/\n+/g, ' ').trim();
+    if (!v) { const i = l.items.indexOf(it); if (i >= 0 && !it.img) l.items.splice(i, 1); else it.text = ''; }
     else { const { text, qty } = parseQty(stripMarker(v)); it.text = cleanText(text || v, MAX.item); it.qty = qty; }
-    touch(l); save(); renderDetail();
+    touch(l); save(); noAnim = true; renderDetail();
   };
-  input.addEventListener('blur', commit, { once: true });
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); if (e.key === 'Escape') { input.value = raw; input.blur(); } });
+  ed.addEventListener('blur', commit, { once: true });
+  ed.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); ed.blur(); }
+    if (e.key === 'Escape') { cancelled = true; ed.blur(); }
+  });
 }
 
 /* ====================== 6e. Share / Copy ====================== */
@@ -2007,7 +2187,7 @@ function listToText(l) {
   const lines = [];
   const t = l.title.trim();
   if (t) { lines.push(t); lines.push(''); }
-  l.items.forEach(it => { const t = stripFmt(it.text) || (it.img ? '📷 Photo' : ''); lines.push((it.done ? '✓ ' : '• ') + t + (it.img && it.text ? ' 📷' : '') + (it.qty > 1 ? ` ×${it.qty}` : '')); });
+  l.items.forEach(it => { const t = stripFmt(it.text) || (it.img ? '📷 Photo' : ''); lines.push((it.done ? '✓ ' : '• ') + t + (it.img && it.text ? ' 📷' : '') + (it.qty > 1 ? ` ×${it.qty}` : '') + (it.due ? ` ⏰ ${dueLabel(it.due)}` : '')); });
   return lines.join('\n');
 }
 /* The WhatsApp button shares the list as text PLUS a tap-to-open join link:
@@ -2082,6 +2262,7 @@ function openListMenu(id) {
       <button class="menu-item" data-act="copy" data-id="${id}">${I.copy} Copy as text</button>
       <button class="menu-item" data-act="whatsapp" data-id="${id}">${I.whatsapp} Share on WhatsApp</button>
       <button class="menu-item" data-act="duplicate" data-id="${id}">${I.duplicate} Duplicate</button>
+      <button class="menu-item" data-act="archive" data-id="${id}">${I.box} Archive</button>
       <div class="menu-sep"></div>
       <button class="menu-item danger" data-act="delete" data-id="${id}">${I.trash} Delete</button>
     </div>`);
@@ -2097,6 +2278,7 @@ function openDetailMenu(id) {
       <button class="menu-item ${l.shared ? 'on' : ''}" data-act="share" data-id="${id}">${I.users} ${l.shared ? 'Sharing — show code' : 'Share &amp; collaborate'}${l.shared ? ` <span class="mi-note">${esc(l.code)}</span>` : ''}</button>
       <button class="menu-item" data-act="cleardone" data-id="${id}">${I.broom} Clear checked items</button>
       <button class="menu-item" data-act="duplicate" data-id="${id}">${I.duplicate} Duplicate list</button>
+      <button class="menu-item" data-act="archive" data-id="${id}">${I.box} Archive list</button>
       <div class="menu-sep"></div>
       <button class="menu-item danger" data-act="delete" data-id="${id}">${I.trash} Delete list</button>
     </div>`);
@@ -2286,11 +2468,26 @@ function toast(msg, actionLabel, fn) {
 
 /* ====================== Event wiring ====================== */
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-open],[data-menu],[data-new],[data-act],[data-color],[data-check],[data-qty],[data-del],[data-sort],[data-filter],[data-clear-filters],[data-toast-action],[data-auth],[data-set-theme],[data-achv-tab]');
+  const t = e.target.closest('[data-open],[data-menu],[data-new],[data-act],[data-color],[data-check],[data-qty],[data-del],[data-sort],[data-filter],[data-clear-filters],[data-toast-action],[data-auth],[data-set-theme],[data-achv-tab],[data-open-archived],[data-open-trash],[data-due-q],[data-due-rem],[data-due-remove],[data-pend-clear]');
   if (!t) return;
 
   if (t.dataset.setTheme) { setTheme(t.dataset.setTheme); buzz(8); return openSettingsSheet(); }
   if (t.dataset.achvTab) { buzz(6); return setAchvTab(t.dataset.achvTab); }
+  if (t.hasAttribute('data-open-archived')) return openArchivedSheet();
+  if (t.hasAttribute('data-open-trash')) return openTrashSheet();
+  if (t.hasAttribute('data-due-q')) return applyDue(parseInt(t.dataset.dueQ, 10) || null);
+  if (t.hasAttribute('data-due-remove')) return applyDue(null);
+  if (t.hasAttribute('data-due-rem')) {
+    dueRem = !dueRem;
+    t.classList.toggle('on', dueRem); t.setAttribute('aria-checked', dueRem);
+    buzz(8); return;
+  }
+  if (t.hasAttribute('data-pend-clear')) {
+    const k = t.dataset.pendClear;
+    if (k === 'pri') pendingPri = null;
+    if (k === 'due') { pendingDue = null; pendingRem = false; }
+    renderPendChips(); buzz(6); return;
+  }
   if (t.dataset.auth) return handleAuth(t.dataset.auth);
   if (t.dataset.menu) { e.stopPropagation(); return openListMenu(t.dataset.menu); }
   if (t.hasAttribute('data-open')) return showDetail(t.dataset.open);
@@ -2323,6 +2520,10 @@ document.addEventListener('click', e => {
     else if (act === 'whatsapp') { closeSheet(); shareWhatsApp(id); }
     else if (act === 'duplicate') { duplicateList(id); }
     else if (act === 'cleardone') { closeSheet(); clearDone(id); }
+    else if (act === 'archive') { closeSheet(); setTimeout(() => archiveList(id), 60); }
+    else if (act === 'unarchive') { unarchiveList(id); openArchivedSheet(); }
+    else if (act === 'restore') { restoreTrash(id); openTrashSheet(); }
+    else if (act === 'purge') { purgeTrash(id); openTrashSheet(); }
     else if (act === 'delete') { closeSheet(); setTimeout(() => deleteList(id), 60); }
     else if (act === 'share') { closeSheet(); setTimeout(() => createShare(id), 60); }
     else if (act === 'stopshare') { stopSharing(id); }
@@ -2346,6 +2547,12 @@ document.addEventListener('submit', e => {
   if (fid === 'auth-form') { e.preventDefault(); handleAuthSubmit(e.target); }
   if (fid === 'reset-form') { e.preventDefault(); handleResetSubmit(e.target); }
   if (fid === 'join-form') { e.preventDefault(); handleJoinSubmit(e.target); }
+  if (fid === 'due-form') {
+    e.preventDefault();
+    const v = document.getElementById('due-custom') && document.getElementById('due-custom').value;
+    const ts = v ? new Date(v).getTime() : NaN;
+    if (Number.isFinite(ts)) applyDue(ts);
+  }
 });
 $('#detail-back').addEventListener('click', () => { try { document.activeElement && document.activeElement.blur(); } catch (e) { } navBack(); });
 $('#detail-copy').addEventListener('click', () => copyList(view.id));
@@ -2358,12 +2565,20 @@ $('#detail-title').addEventListener('input', () => { const l = getList(view.id);
 $('#home-search').addEventListener('input', e => { homeQuery = e.target.value; renderHome(); });
 $('#search-clear').addEventListener('click', () => { homeQuery = ''; $('#home-search').value = ''; renderHome(); $('#home-search').focus(); });
 
-$('#addbar').addEventListener('submit', e => { e.preventDefault(); const v = $('#add-input').value.trim(); if (v) { addItems(v); $('#add-input').value = ''; syncSend(); } });
-$('#add-input').addEventListener('input', syncSend);
-$('#add-input').addEventListener('paste', e => {
-  const txt = (e.clipboardData || window.clipboardData)?.getData('text') || '';
-  if (/[\n,]/.test(txt) && txt.trim()) { e.preventDefault(); addItems(txt); $('#add-input').value = ''; syncSend(); }
+function submitAdd() {
+  const el = edEl(), v = editorValue(el).trim();
+  if (!v) return;
+  addItems(v);
+  edClear(el); syncSend();
+}
+$('#addbar').addEventListener('submit', e => { e.preventDefault(); submitAdd(); });
+// contenteditable: Enter adds the item (a form never auto-submits from a div)
+$('#add-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitAdd(); }
 });
+// keep the :empty placeholder honest — a lone <br> left after deleting all text
+// still counts as empty (paste is handled by the document-level listener above)
+$('#add-input').addEventListener('input', () => { const el = edEl(); if (el && !el.textContent) el.innerHTML = ''; syncSend(); });
 $('#mic').addEventListener('click', toggleVoice);
 $('#img-btn').addEventListener('click', () => pickImageFor('new'));
 $('#img-input').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) onImagePicked(f); });
@@ -2378,79 +2593,379 @@ $('#items').addEventListener('click', e => {
   if (text) beginEdit(text.dataset.edit);
 });
 
-/* ---- inline text formatting (bold / underline / text colour) ---- */
-/* Applying bold/underline also scrubs stray markdown noise (hashtags, *, _, ~,
-   backticks) from the selection — pasted text like "## Milk" becomes clean
-   bold "Milk" instead of keeping the symbols. Our own colour markers inside
-   the selection are preserved (their "#" is part of the marker, not noise). */
-function cleanMarkup(s) {
-  return s.split(/(\{c:#[0-9A-Fa-f]{6}\}|\{\/c\})/)
-    .map((part, i) => i % 2 ? part : part.replace(/[*_~`#]+/g, ''))
-    .join('').replace(/ {2,}/g, ' ');
+/* ---- WYSIWYG rich text (bold / underline / text colour / container colour) ----
+   The user NEVER sees markup. The add bar and the inline item editor are
+   contenteditable surfaces: tapping B/U/A applies the style visually to the
+   live selection, exactly like Apple Notes / Google Docs. PERSISTENCE IS
+   UNCHANGED — on save the editor DOM is serialised back to the same
+   lightweight markers as before (**bold**, __underline__, {c:#hex}…{/c}), so
+   storage, cloud sync, shared lists and every existing list keep working with
+   zero migration, and fmtText() renders rows exactly as it always has. */
+const edEl = () => $('#add-input');
+const edPlain = el => String((el && el.textContent) || '').replace(/\u00A0/g, ' ').trim();
+function edClear(el) { if (el) el.innerHTML = ''; }
+function edSetText(el, text) { if (el) el.textContent = text; }
+function placeCaretEnd(el) {
+  try {
+    const r = document.createRange(); r.selectNodeContents(el); r.collapse(false);
+    const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+  } catch (e) { }
 }
-function wrapSelection(input, pre, post = pre, clean = false) {
-  if (!input) return;
-  const v = input.value;
-  let s = input.selectionStart, e = input.selectionEnd;
-  if (s == null) { s = e = v.length; }
-  let sel = v.slice(s, e);
-  if (sel) {
-    if (clean) sel = cleanMarkup(sel);
-    // Edge whitespace stays OUTSIDE the markers ("Milk **" never "** Milk"), so
-    // styled text starts crisply even when a stripped "## " left a gap behind.
-    const lead = sel.match(/^\s*/)[0], rest = sel.slice(lead.length);
-    const trail = rest.match(/\s*$/)[0], core = rest.slice(0, rest.length - trail.length);
-    input.value = v.slice(0, s) + lead + pre + core + post + trail + v.slice(e);
-    input.setSelectionRange(s + lead.length + pre.length, s + lead.length + pre.length + core.length);
+function cssColorToHex(c) {
+  if (!c) return null;
+  c = String(c).trim();
+  if (/^#[0-9A-Fa-f]{6}$/.test(c)) return c.toUpperCase();
+  if (/^#[0-9A-Fa-f]{3}$/.test(c)) return ('#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3]).toUpperCase();
+  const m = c.match(/^rgba?\(\s*(\d+)\s*[, ]\s*(\d+)\s*[, ]\s*(\d+)/i);
+  if (!m) return null;
+  return '#' + [m[1], m[2], m[3]].map(n => Math.min(255, +n).toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+/* Editor DOM → marker text. Walks the edited nodes tracking the inherited
+   bold/underline/colour context (handles <b>/<strong>/<u>/<font>/styled spans —
+   everything the browser's rich-text commands can produce). Block boundaries
+   become newlines FIRST, and each line's runs are wrapped independently, so a
+   marker can never span two lines (multi-line paste → clean per-item markers). */
+function editorValue(root) {
+  if (!root) return '';
+  let defColor = null;
+  try { defColor = cssColorToHex(getComputedStyle(root).color); } catch (e) { }
+  const lines = [[]];
+  const put = (text, f) => { if (text) lines[lines.length - 1].push({ t: text, b: f.b, u: f.u, c: f.c }); };
+  const nl = () => { if (lines[lines.length - 1].length) lines.push([]); };
+  const BLOCK = /^(DIV|P|LI|UL|OL|BLOCKQUOTE|H[1-6])$/;
+  (function walk(node, f) {
+    for (const ch of node.childNodes) {
+      if (ch.nodeType === 3) { put(ch.nodeValue.replace(/\u00A0/g, ' '), f); continue; }
+      if (ch.nodeType !== 1) continue;
+      const tag = ch.tagName;
+      if (tag === 'BR') { nl(); continue; }
+      const st = ch.style || {};
+      const g = { ...f };
+      if (tag === 'B' || tag === 'STRONG') g.b = true;
+      if (tag === 'U') g.u = true;
+      const fw = String(st.fontWeight || '');
+      if (fw) g.b = fw === 'bold' || fw === 'bolder' || parseInt(fw, 10) >= 600;
+      const td = String(st.textDecorationLine || st.textDecoration || '');
+      if (/underline/.test(td)) g.u = true; else if (/\bnone\b/.test(td)) g.u = false;
+      const col = cssColorToHex((tag === 'FONT' && ch.getAttribute('color')) || st.color);
+      if (col) g.c = (col === defColor) ? null : col;
+      const block = BLOCK.test(tag);
+      if (block) nl();
+      walk(ch, g);
+      if (block) nl();
+    }
+  })(root, { b: false, u: false, c: null });
+  return lines.map(runs => {
+    const merged = [];                                    // fuse equal neighbours so markers don't fragment
+    for (const r of runs) {
+      const last = merged[merged.length - 1];
+      if (last && last.b === r.b && last.u === r.u && last.c === r.c) last.t += r.t;
+      else merged.push({ ...r });
+    }
+    return merged.map(r => {
+      const lead = r.t.match(/^\s*/)[0], rest = r.t.slice(lead.length);
+      const trail = rest.match(/\s*$/)[0], core = rest.slice(0, rest.length - trail.length);
+      if (!core || (!r.b && !r.u && !r.c)) return r.t;    // whitespace / unformatted → as-is
+      let w = core;
+      if (r.u) w = '__' + w + '__';
+      if (r.b) w = '**' + w + '**';
+      if (r.c) w = '{c:' + r.c + '}' + w + '{/c}';
+      return lead + w + trail;
+    }).join('');
+  }).filter(s => s.trim()).join('\n').trim();
+}
+const fmtTarget = () => { const a = document.activeElement; return (a && (a.id === 'add-input' || a.classList.contains('item-edit'))) ? a : edEl(); };
+function execFmt(cmd, val) {
+  const input = fmtTarget(); if (!input) return;
+  if (document.activeElement !== input) { input.focus(); placeCaretEnd(input); }
+  // foreColor via CSS spans; bold/underline as plain <b>/<u> — both serialise fine
+  try { document.execCommand('styleWithCSS', false, cmd === 'foreColor'); } catch (e) { }
+  try { document.execCommand(cmd, false, val); } catch (e) { }
+  syncFmtState();
+  if (input.id === 'add-input') syncSend();
+}
+function syncFmtState() {
+  try {
+    const bb = document.querySelector('[data-fmt="bold"]'), ub = document.querySelector('[data-fmt="underline"]');
+    if (bb) bb.classList.toggle('on', document.queryCommandState('bold'));
+    if (ub) ub.classList.toggle('on', document.queryCommandState('underline'));
+  } catch (e) { }
+}
+document.addEventListener('selectionchange', () => {
+  const a = document.activeElement;
+  if (a && (a.id === 'add-input' || a.classList.contains('item-edit'))) syncFmtState();
+});
+
+/* ---- container colour (per-item card background) ----
+   While editing an item it recolours THAT row live; in the add bar it tints the
+   composer so you see exactly what the next item will look like (sticky until
+   cleared or you leave the list). */
+let pendingBg = null;
+function applyAddbarBg() {
+  const bar = $('#addbar'); if (!bar) return;
+  bar.classList.toggle('tinted', !!pendingBg);
+  if (pendingBg) bar.style.setProperty('--bg', pendingBg); else bar.style.removeProperty('--bg');
+}
+function setContainerBg(hex) {
+  const a = document.activeElement;
+  if (a && a.classList.contains('item-edit')) {
+    const row = a.closest('.item'); const l = getList(view.id);
+    const it = l && row && l.items.find(i => i.id === row.dataset.id);
+    if (!it) return;
+    it.bg = isBgHex(hex) ? hex : null; touch(l); save();
+    row.classList.toggle('tinted', !!it.bg);
+    if (it.bg) row.style.setProperty('--bg', it.bg); else row.style.removeProperty('--bg');
   } else {
-    input.value = v.slice(0, s) + pre + post + v.slice(s);
-    const p = s + pre.length; input.setSelectionRange(p, p);
+    pendingBg = isBgHex(hex) ? hex : null;
+    applyAddbarBg();
   }
 }
-/* Colour is applied via the marker pair; "remove colour" unwraps the markers in
-   the selection (or, with nothing selected, in the whole text) — the text
-   itself is never altered, only its colour. */
-const COLOR_MARK_RE = /\{c:#[0-9A-Fa-f]{6}\}([\s\S]*?)\{\/c\}/g;
-function clearColor(input) {
-  if (!input) return;
-  const v = input.value;
-  let s = input.selectionStart, e = input.selectionEnd;
-  if (s == null || s === e) { input.value = v.replace(COLOR_MARK_RE, '$1'); return; }
-  const cleaned = v.slice(s, e).replace(COLOR_MARK_RE, '$1');
-  input.value = v.slice(0, s) + cleaned + v.slice(e);
-  input.setSelectionRange(s, s + cleaned.length);
+
+/* ---- priority + due date (item metadata) ----
+   Same dual targeting as the container colour: while editing an item they apply
+   to THAT item instantly; from the add bar they park as pending chips shown
+   above the composer and ride along with the next item added. */
+let pendingPri = null, pendingDue = null, pendingRem = false;
+function renderPendChips() {
+  const el = $('#pend-chips'); if (!el) return;
+  const chips = [];
+  if (pendingPri) chips.push(`<button class="pend-chip" data-pend-clear="pri" style="--pc:${PRI[pendingPri].color}" aria-label="Remove priority">${I.flag}<span>${PRI[pendingPri].label}</span>${I.x}</button>`);
+  if (pendingDue) chips.push(`<button class="pend-chip" data-pend-clear="due" aria-label="Remove due date">${I.cal}<span>${esc(dueLabel(pendingDue))}</span>${pendingRem ? I.bell : ''}${I.x}</button>`);
+  el.innerHTML = chips.join('');
+  el.hidden = !chips.length;
 }
-const fmtTarget = () => { const a = document.activeElement; return (a && (a.id === 'add-input' || a.classList.contains('item-edit'))) ? a : $('#add-input'); };
-// pointerdown + preventDefault keeps the text field focused and its selection intact
+/* Refresh one row's meta chips in place (keeps an open editor alive). */
+function updateRowMeta(row, it) {
+  const main = row && row.querySelector('.item-main'); if (!main) return;
+  const old = main.querySelector('.item-meta'); if (old) old.remove();
+  const html = itemMetaHTML(it);
+  if (html) main.insertAdjacentHTML('beforeend', html);
+}
+function setPriority(p) {
+  p = p ? parseInt(p, 10) : null;
+  if (p && !PRI[p]) return;
+  const a = document.activeElement;
+  if (a && a.classList.contains('item-edit')) {
+    const row = a.closest('.item'); const l = getList(view.id);
+    const it = l && row && l.items.find(i => i.id === row.dataset.id);
+    if (!it) return;
+    it.pri = p; touch(l); save();
+    updateRowMeta(row, it);
+  } else {
+    pendingPri = p;
+    renderPendChips();
+  }
+}
+
+/* ---- due-date sheet ---- */
+let dueTarget = 'pending', dueRem = true;
+const atTime = (d, h, m = 0) => { const x = new Date(d); x.setHours(h, m, 0, 0); return x; };
+function quickEvening() {
+  const now = new Date(); let d = atTime(now, 18), label = 'This evening';
+  if (d - now < 15 * 60000) { d = atTime(new Date(now.getTime() + 864e5), 18); label = 'Tomorrow evening'; }
+  return { ts: +d, label };
+}
+const quickTomorrow = () => +atTime(new Date(Date.now() + 864e5), 9);
+function quickWeekend() {
+  const now = new Date(); let add = (6 - now.getDay() + 7) % 7; if (!add) add = 7;
+  return +atTime(new Date(now.getTime() + add * 864e5), 10);
+}
+function toLocalInput(ts) {
+  const d = new Date(ts), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function openDueSheet(target) {
+  let cur = null, curRem = true;
+  if (target !== 'pending') {
+    const l = getList(view.id); const it = l && l.items.find(i => i.id === target);
+    if (!it) return;
+    cur = it.due; curRem = it.due ? it.rem !== false : true;
+  } else { cur = pendingDue; curRem = pendingDue ? pendingRem : true; }
+  dueTarget = target; dueRem = curRem;
+  const eve = quickEvening();
+  openSheet(`
+    <h2 class="sheet-title">Due date</h2>
+    <p class="sheet-sub">Give it a deadline — QuickList reminds you on time.</p>
+    <div class="menu-list">
+      <button class="menu-item" data-due-q="${eve.ts}">${I.cal} ${eve.label} <span class="mi-note">18:00</span></button>
+      <button class="menu-item" data-due-q="${quickTomorrow()}">${I.cal} Tomorrow <span class="mi-note">09:00</span></button>
+      <button class="menu-item" data-due-q="${quickWeekend()}">${I.cal} This weekend <span class="mi-note">Sat 10:00</span></button>
+    </div>
+    <p class="field-label">Pick date &amp; time</p>
+    <form id="due-form" class="due-form">
+      <input class="field" type="datetime-local" id="due-custom" value="${toLocalInput(cur || quickTomorrow())}">
+      <button class="btn btn-c" type="submit" style="--c:#5A63E0;--on:#fff">Set</button>
+    </form>
+    <div class="set-list"><div class="set-row">
+      <div class="set-label"><div class="set-title">Remind me</div><div class="set-desc">Notification when it's due.</div></div>
+      <button class="toggle ${dueRem ? 'on' : ''}" data-due-rem role="switch" aria-checked="${dueRem}" aria-label="Remind me"></button>
+    </div></div>
+    ${cur ? `<button class="btn btn-ghost btn-block" data-due-remove style="margin-top:8px">${I.x}<span>Remove due date</span></button>` : ''}
+  `);
+}
+function applyDue(ts) {
+  const rem = ts ? dueRem : false;
+  if (dueTarget === 'pending') { pendingDue = ts; pendingRem = rem; renderPendChips(); }
+  else {
+    const l = getList(view.id); const it = l && l.items.find(i => i.id === dueTarget);
+    if (it) { it.due = ts; it.rem = rem; touch(l); save(); noAnim = true; renderDetail(); }
+  }
+  closeSheet();
+  if (ts && rem) ensureNotifPermission();
+  scheduleRemindersSoon();
+  buzz(8);
+  toast(ts ? 'Due ' + dueLabel(ts) : 'Due date removed');
+}
+
+/* ---- reminders engine ----
+   In the installed app, @capacitor/local-notifications schedules REAL OS
+   notifications (they fire with the app closed). On the plain web there is no
+   reliable closed-tab scheduling, so the fallback is an in-page timer + the
+   Notification API while QuickList is open. The schedule is re-synced from the
+   data (debounced) after every save, so done/deleted/edited items are always
+   reflected — the state is the single source of truth. */
+const LN = () => (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) || null;
+const notifId = id => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) | 0; return Math.abs(h) % 2147483000; };
+let remTimer = null, remSyncT = null;
+function scheduleRemindersSoon() { clearTimeout(remSyncT); remSyncT = setTimeout(() => { syncReminders().catch(() => { }); }, 1500); }
+function dueRemindables() {
+  const out = [];
+  for (const l of (state && state.lists) || []) {
+    if (l.archived) continue;
+    for (const it of l.items) if (!it.done && it.rem && it.due && it.due > Date.now()) out.push({ l, it });
+  }
+  out.sort((a, b) => a.it.due - b.it.due);
+  return out.slice(0, 50);   // Android caps pending alarms; 50 nearest is plenty
+}
+async function syncReminders() {
+  const top = dueRemindables();
+  const ln = LN();
+  if (ln) {
+    try {
+      const perm = await ln.checkPermissions();
+      if (!perm || perm.display !== 'granted') return;
+      const pending = await ln.getPending();
+      if (pending && pending.notifications && pending.notifications.length) {
+        await ln.cancel({ notifications: pending.notifications.map(n => ({ id: n.id })) });
+      }
+      if (top.length) {
+        await ln.schedule({
+          notifications: top.map(({ l, it }) => ({
+            id: notifId(it.id),
+            title: cleanText(stripFmt(it.text), 60) || 'Reminder',
+            body: (l.title ? cleanText(stripFmt(l.title), 40) : 'QuickList') + ' · due now',
+            schedule: { at: new Date(it.due), allowWhileIdle: true },
+          })),
+        });
+      }
+    } catch (e) { /* plugin missing from an old build — web fallback below is separate */ }
+    return;
+  }
+  // Web: one timer for the nearest reminder while the app is open
+  clearTimeout(remTimer);
+  if (!top.length) return;
+  const next = top[0];
+  const wait = Math.min(next.it.due - Date.now(), 2147000000);
+  remTimer = setTimeout(() => {
+    const txt = stripFmt(next.it.text) || 'Reminder';
+    buzz(20);
+    toast('⏰ ' + txt);
+    try {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('QuickList', { body: txt });
+      }
+    } catch (e) { }
+    syncReminders().catch(() => { });
+  }, wait);
+}
+async function ensureNotifPermission() {
+  try {
+    const ln = LN();
+    if (ln) {
+      const p = await ln.checkPermissions();
+      if (!p || p.display !== 'granted') { await ln.requestPermissions(); scheduleRemindersSoon(); }
+    } else if ('Notification' in window && Notification.permission === 'default') {
+      await Notification.requestPermission();
+    }
+  } catch (e) { }
+}
+
+// pointerdown + preventDefault keeps the editor focused and its selection intact
 document.addEventListener('pointerdown', e => {
   const sw = e.target.closest('[data-fmt-color]');
   if (sw) {
     e.preventDefault();
     const input = fmtTarget(), hex = sw.dataset.fmtColor;
-    if (hex) wrapSelection(input, `{c:${hex}}`, '{/c}');
-    else clearColor(input);
+    // "remove colour" = repaint with the editor's own default ink — the
+    // serialiser resolves that back to "no colour marker"
+    let val = hex;
+    if (!val) { try { val = getComputedStyle(input).color; } catch (x) { val = 'inherit'; } }
+    execFmt('foreColor', val);
     $('#fmt-colors').hidden = true;
-    if (input && input.id === 'add-input') syncSend();
+    buzz(6);
+    return;
+  }
+  const fill = e.target.closest('[data-fmt-fill]');
+  if (fill) {
+    e.preventDefault();
+    setContainerBg(fill.dataset.fmtFill || null);
+    $('#fmt-fills').hidden = true;
+    buzz(6);
+    return;
+  }
+  const pri = e.target.closest('[data-fmt-pri]');
+  if (pri) {
+    e.preventDefault();
+    setPriority(pri.dataset.fmtPri || null);
+    $('#fmt-pris').hidden = true;
     buzz(6);
     return;
   }
   const b = e.target.closest('[data-fmt]'); if (!b) return;
+  const kind = b.dataset.fmt;
+  // The due button deliberately does NOT preventDefault: the editor should blur
+  // (committing an in-progress edit) before the sheet opens. Grab the target
+  // item NOW, while the editor still exists.
+  if (kind === 'due') {
+    const a = document.activeElement;
+    const row = a && a.classList.contains('item-edit') ? a.closest('.item') : null;
+    const target = row ? row.dataset.id : 'pending';
+    setTimeout(() => openDueSheet(target), 120);
+    buzz(6);
+    return;
+  }
   e.preventDefault();
-  if (b.dataset.fmt === 'color') { const row = $('#fmt-colors'); row.hidden = !row.hidden; buzz(6); return; }
-  const input = fmtTarget();
-  wrapSelection(input, b.dataset.fmt === 'bold' ? '**' : '__', undefined, true);
-  if (input && input.id === 'add-input') syncSend();
+  const hideRows = except => ['#fmt-colors', '#fmt-fills', '#fmt-pris'].forEach(s => { if (s !== except) $(s).hidden = true; });
+  if (kind === 'color') { const row = $('#fmt-colors'); const show = row.hidden; hideRows('#fmt-colors'); row.hidden = !show; buzz(6); return; }
+  if (kind === 'fill') { const row = $('#fmt-fills'); const show = row.hidden; hideRows('#fmt-fills'); row.hidden = !show; buzz(6); return; }
+  if (kind === 'pri') { const row = $('#fmt-pris'); const show = row.hidden; hideRows('#fmt-pris'); row.hidden = !show; buzz(6); return; }
+  execFmt(kind === 'bold' ? 'bold' : 'underline');
   buzz(6);
 });
-// The formatting bar only appears while a text field is focused (add or edit)
+// The formatting bar only appears while an editor is focused (add or edit)
 document.addEventListener('focusin', e => {
   if (!e.target.matches('#add-input, .item-edit')) return;
   document.body.classList.add('fmt-on');
-  $('#fmt-colors').hidden = true;   // swatches start collapsed for each field
+  $('#fmt-colors').hidden = true;   // swatch rows start collapsed for each field
+  $('#fmt-fills').hidden = true;
+  $('#fmt-pris').hidden = true;
+  syncFmtState();
 });
 document.addEventListener('focusout', e => {
   if (!e.target.matches('#add-input, .item-edit')) return;
-  setTimeout(() => { const a = document.activeElement; if (!a || !a.matches('#add-input, .item-edit')) { document.body.classList.remove('fmt-on'); $('#fmt-colors').hidden = true; } }, 60);
+  setTimeout(() => { const a = document.activeElement; if (!a || !a.matches('#add-input, .item-edit')) { document.body.classList.remove('fmt-on'); $('#fmt-colors').hidden = true; $('#fmt-fills').hidden = true; $('#fmt-pris').hidden = true; } }, 60);
+});
+// Paste lands as PLAIN text (no foreign HTML can enter the editor). A block
+// pasted into the add bar still becomes multiple clean items, as before.
+document.addEventListener('paste', e => {
+  const el = e.target && e.target.closest && e.target.closest('#add-input, .item-edit');
+  if (!el) return;
+  e.preventDefault();
+  const txt = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+  if (!txt.trim()) return;
+  if (el.id === 'add-input' && /[\n,]/.test(txt)) { addItems(txt); edClear(el); syncSend(); return; }
+  try { document.execCommand('insertText', false, txt.replace(/\s+/g, ' ')); } catch (x) { }
+  if (el.id === 'add-input') syncSend();
 });
 
 /* Keep the add bar visible above the on-screen keyboard. The visualViewport
@@ -2486,6 +3001,7 @@ document.addEventListener('visibilitychange', () => {
     save(); streakToast(); checkBadges(); renderStreakChip();
     if (view.name === 'streak') renderStreakPage();
   }
+  scheduleRemindersSoon();   // returning to the app: re-arm the reminder schedule
 });
 
 /* ====================== 7. Init ====================== */
@@ -2510,12 +3026,22 @@ function init() {
   $('#img-btn').innerHTML = I.camera;
   $('#add-send').innerHTML = I.send;
   $('#fab-icon').innerHTML = I.plus;
+  $('#fmt-pri-btn').innerHTML = I.flag;
+  $('#fmt-due-btn').innerHTML = I.cal;
   if (!SR) $('#mic').style.display = 'none';
 
   // Text-colour swatches for the formatting bar (same 10-colour identity palette)
   $('#fmt-colors').innerHTML = PALETTE.map(p =>
     `<button type="button" class="fmt-swatch" style="background:${p.hex}" data-fmt-color="${p.hex}" aria-label="${p.id} text"></button>`).join('')
     + `<button type="button" class="fmt-swatch clear" data-fmt-color="" aria-label="Remove colour">${I.x}</button>`;
+  // Container-colour swatches (the fill button): recolours the item's card itself
+  $('#fmt-fills').innerHTML = PALETTE.map(p =>
+    `<button type="button" class="fmt-swatch" style="background:${p.hex}" data-fmt-fill="${p.hex}" aria-label="${p.id} container"></button>`).join('')
+    + `<button type="button" class="fmt-swatch clear" data-fmt-fill="" aria-label="Remove container colour">${I.x}</button>`;
+  // Priority cells (the flag button): Urgent → Low, plus none
+  $('#fmt-pris').innerHTML = [4, 3, 2, 1].map(p =>
+    `<button type="button" class="pri-cell" data-fmt-pri="${p}" style="--pc:${PRI[p].color}">${I.flag}<span>${PRI[p].label}</span></button>`).join('')
+    + `<button type="button" class="pri-cell none" data-fmt-pri="">${I.x}<span>None</span></button>`;
   $('#streak-btn').addEventListener('click', () => showStreak());
   $('#streak-back').innerHTML = I.back;
   $('#streak-back').addEventListener('click', () => navBack());
@@ -2547,8 +3073,20 @@ function init() {
         if (sheetOpen() || view.name !== 'home') navBack();
         else CApp.exitApp();
       });
+      // The home-screen widget's "+" launches the app with quicklist://new —
+      // warm start arrives via appUrlOpen, cold start via getLaunchUrl.
+      const handleAppUrl = url => {
+        if (typeof url !== 'string' || !/^quicklist:\/\/new/i.test(url)) return;
+        const l = createList(); showDetail(l.id);
+        setTimeout(() => { try { $('#add-input').focus(); } catch (e) { } }, 320);
+      };
+      CApp.addListener('appUrlOpen', d => handleAppUrl(d && d.url));
+      if (typeof CApp.getLaunchUrl === 'function') {
+        CApp.getLaunchUrl().then(d => handleAppUrl(d && d.url)).catch(() => { });
+      }
     }
   } catch (e) { }
+  scheduleRemindersSoon();       // arm notifications for any due items (native or web fallback)
 
   // Register the SW only on the web (PWA offline). In the native APK (Capacitor)
   // the assets are already bundled locally, so we SKIP the SW — this prevents any

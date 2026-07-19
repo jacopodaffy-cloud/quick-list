@@ -17,8 +17,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <!-- Apply the saved theme before paint (external file = CSP-safe, no inline) -->
-  <script src="theme.js?v=53"></script>
-  <link rel="stylesheet" href="app.css?v=53">
+  <script src="theme.js?v=55"></script>
+  <link rel="stylesheet" href="app.css?v=55">
 </head>
 <body>
 <noscript><div style="padding:40px;font-family:system-ui">QuickList needs JavaScript to run.</div></noscript>
@@ -49,6 +49,7 @@
     </div>
 
     <div class="grid" id="grid"></div>
+    <div id="home-foot"></div>
     <div class="fab-wrap">
       <button id="join-fab" aria-label="Join a list with a code"></button>
       <button id="fab" aria-label="New list"><span id="fab-icon"></span>New list</button>
@@ -80,14 +81,19 @@
     <div class="addbar-wrap">
       <p class="voice-hint" id="voice-hint"></p>
       <div class="fmt-colors" id="fmt-colors" hidden></div>
+      <div class="fmt-colors" id="fmt-fills" hidden></div>
+      <div class="fmt-colors" id="fmt-pris" hidden></div>
       <div class="fmt-bar" role="toolbar" aria-label="Text formatting">
         <button type="button" class="fmt-btn" data-fmt="bold" aria-label="Bold"><b>B</b></button>
         <button type="button" class="fmt-btn" data-fmt="underline" aria-label="Underline"><u>U</u></button>
         <button type="button" class="fmt-btn" data-fmt="color" aria-label="Text colour"><span class="fmt-a">A</span></button>
-        <span class="fmt-hint">Select text, then tap</span>
+        <button type="button" class="fmt-btn" data-fmt="fill" aria-label="Container colour"><span class="fmt-fill"></span></button>
+        <button type="button" class="fmt-btn" data-fmt="pri" aria-label="Priority" id="fmt-pri-btn"></button>
+        <button type="button" class="fmt-btn" data-fmt="due" aria-label="Due date" id="fmt-due-btn"></button>
       </div>
+      <div id="pend-chips" hidden></div>
       <form id="addbar">
-        <input id="add-input" placeholder="Add an item…  (paste, or “milk x2”)" enterkeyhint="done" autocomplete="off">
+        <div id="add-input" contenteditable="true" role="textbox" aria-label="Add an item" data-ph="Add an item…  (paste, or “milk x2”)" enterkeyhint="done" spellcheck="false"></div>
         <button type="button" class="img-btn" id="img-btn" aria-label="Add a photo"></button>
         <button type="button" class="mic-btn" id="mic" aria-label="Dictate by voice"></button>
         <button type="submit" class="add-send" id="add-send" aria-label="Add"></button>
@@ -111,7 +117,7 @@
   <div id="sheet-root"></div>
   <div id="toast-root"></div>
 </div>
-<script src="config.js?v=53"></script>
-<script src="app.js?v=53"></script>
+<script src="config.js?v=55"></script>
+<script src="app.js?v=55"></script>
 </body>
 </html>
