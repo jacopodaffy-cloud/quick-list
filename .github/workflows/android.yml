@@ -264,11 +264,17 @@ jobs:
           # POST_NOTIFICATIONS: required on Android 13+ for due-date reminders
           # (@capacitor/local-notifications asks the user at runtime; this only
           # declares the capability — the merger dedupes if the plugin adds it too).
-          # RECORD_AUDIO: the mic button. Capacitor's WebChromeClient answers the
-          # WebView's RESOURCE_AUDIO_CAPTURE request by asking for RECORD_AUDIO —
-          # but only if it is declared here, so without this line voice input can
-          # never be granted in the installed app and always fails 'not-allowed'.
-          sed -i 's#</manifest>#    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove"/>\n    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove"/>\n    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove"/>\n    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_CUSTOM_AUDIENCE" tools:node="remove"/>\n    <uses-permission android:name="android.permission.USE_CREDENTIALS" tools:node="remove"/>\n    <uses-permission android:name="android.permission.DUMP" tools:node="remove"/>\n</manifest>#' "$M"
+          # RECORD_AUDIO is deliberately NOT declared. Declaring it would buy
+          # nothing today — Android's WebView ships no speech-recognition
+          # service, so the Web Speech API cannot work inside the APK even with
+          # the permission granted — while costing real harm: minSdk is 22, and
+          # below API 23 permissions are granted at INSTALL time, so adding a
+          # dangerous permission makes Play warn that existing users "may be
+          # unable to upgrade" (auto-update stops until they accept by hand).
+          # Voice stays a web/PWA feature and app.js hides the mic button in the
+          # native shell. Add this back only together with a real native plugin
+          # (@capacitor-community/speech-recognition), never on its own.
+          sed -i 's#</manifest>#    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove"/>\n    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove"/>\n    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove"/>\n    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_CUSTOM_AUDIENCE" tools:node="remove"/>\n    <uses-permission android:name="android.permission.USE_CREDENTIALS" tools:node="remove"/>\n    <uses-permission android:name="android.permission.DUMP" tools:node="remove"/>\n</manifest>#' "$M"
           echo "=== AndroidManifest.xml ===" ; cat "$M"
 
       - name: Set custom app icon
@@ -279,7 +285,7 @@ jobs:
       - name: Override variables.gradle and version code
         run: |
           cp variables.gradle android/variables.gradle
-          sed -i 's/versionCode 1/versionCode 56/g' android/app/build.gradle
+          sed -i 's/versionCode 1/versionCode 57/g' android/app/build.gradle
           echo "=== variables.gradle ==="
           cat android/variables.gradle
           echo "=== versionCode ==="

@@ -21,19 +21,21 @@
 // Keep in lockstep with versionCode in .github/workflows/android.yml — bump BOTH
 // every release (see PRD "Bump every release"), or installed apps stop noticing
 // new versions.
-const APP_VERSION_CODE = 56;
+const APP_VERSION_CODE = 57;
 
 // The public home of the web app — used for the update wall and for share links
 // (inside the APK location.origin is https://localhost, never usable in a link).
 const APP_URL = 'https://jacopodaffy-cloud.github.io/quick-list/';
 const PLAY_URL = 'https://play.google.com/store/apps/details?id=app.quicklist.twa';
 
+// Running inside the Capacitor APK rather than a browser tab.
+const IS_NATIVE = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function'
+  && window.Capacitor.isNativePlatform());
+
 // Inside the APK a relative fetch would read the version.json BUNDLED at build
 // time (frozen forever) — the check must always ask the live site. On the web
 // the relative URL is the live site already.
-const VERSION_URL = (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform())
-  ? APP_URL + 'version.json'
-  : 'version.json';
+const VERSION_URL = IS_NATIVE ? APP_URL + 'version.json' : 'version.json';
 
 async function checkForceUpdate() {
   try {
@@ -3136,7 +3138,12 @@ function init() {
   $('#fab-icon').innerHTML = I.plus;
   $('#fmt-pri-btn').innerHTML = I.flag;
   $('#fmt-due-btn').innerHTML = I.cal;
-  if (!SR) $('#mic').style.display = 'none';
+  // Voice is a web/PWA feature. Android's WebView ships no speech-recognition
+  // service, so dictation cannot work inside the APK — and the app deliberately
+  // does not declare RECORD_AUDIO (see android.yml: it would block Play
+  // upgrades on API < 23 for a feature that still wouldn't work). Hide the
+  // button there rather than offer one that always fails.
+  if (!SR || IS_NATIVE) $('#mic').style.display = 'none';
 
   // Text-colour swatches for the formatting bar (same 10-colour identity palette)
   $('#fmt-colors').innerHTML = PALETTE.map(p =>
