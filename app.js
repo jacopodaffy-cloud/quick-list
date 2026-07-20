@@ -21,7 +21,7 @@
 // Keep in lockstep with versionCode in .github/workflows/android.yml — bump BOTH
 // every release (see PRD "Bump every release"), or installed apps stop noticing
 // new versions.
-const APP_VERSION_CODE = 57;
+const APP_VERSION_CODE = 58;
 
 // The public home of the web app — used for the update wall and for share links
 // (inside the APK location.origin is https://localhost, never usable in a link).

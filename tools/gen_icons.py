@@ -1,44 +1,37 @@
 """
-Generate Android launcher icons for QuickList.
-Run from the project root: python3 tools/gen_icons.py
+Generate Android launcher icons for QuickList from the shared icon-512.png master.
+Run from the project root:  python3 tools/gen_icons.py
 
-- Dots are smaller (r = 0.075 * px) and sit comfortably inside safe zone
-- ic_launcher.png has pre-baked rounded corners so it looks right on every launcher
-- ic_launcher_background.xml is overwritten with the same dark colour so no white shows
+icon-512.png is the full-bleed QuickList mark (blue field, white list card) that
+tools/make-icons.js renders from the same coordinates as icon.svg. Resizing that
+one master keeps the launcher icon identical to the PWA / web icon.
+
+- ic_launcher.png            legacy icon, corners rounded (transparent outside)
+- ic_launcher_round.png      round-mask variant (full bleed; OS circles it)
+- ic_launcher_foreground.png adaptive foreground (full bleed; OS masks it)
+- ic_launcher_background.xml solid brand blue, so no white shows behind the mask
 """
 from PIL import Image, ImageDraw
 import os
 
-BG = (0x14, 0x16, 0x1B, 255)
-DOTS = [(0xF2, 0x55, 0x5A), (0xE8, 0xA9, 0x17),
-        (0x2E, 0x97, 0xE8), (0x21, 0xA9, 0x71)]
+BLUE = (0x2F, 0x6B, 0xF6, 255)
+SRC = os.path.join(os.path.dirname(__file__), '..', 'icon-512.png')
+master = Image.open(SRC).convert('RGBA')
 
 
-def make_icon(px):
-    """Dark canvas with 4 smaller coloured dots."""
-    img = Image.new('RGBA', (px, px), BG)
-    d = ImageDraw.Draw(img)
-    c = px / 2.0
-    off = 0.08 * px    # dots close together (was 0.13)
-    r = 0.075 * px          # smaller than before (was 0.11)
-    centres = [(c - off, c - off), (c + off, c - off),
-               (c - off, c + off), (c + off, c + off)]
-    for (cx, cy), col in zip(centres, DOTS):
-        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=col + (255,))
-    return img
+def resized(px):
+    return master.resize((px, px), Image.LANCZOS)
 
 
-def make_icon_rounded(px):
-    """Same icon with pre-rounded corners (22% radius) baked in.
-    Corners are filled with the same dark BG so no white or transparent areas."""
-    base = make_icon(px)
+def rounded(px, radius_frac=0.22):
+    """Resized master with rounded corners; area outside the radius is transparent
+    so legacy launchers (pre-adaptive, API < 26) show a clean squircle."""
+    base = resized(px)
     mask = Image.new('L', (px, px), 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        [0, 0, px - 1, px - 1], radius=int(px * 0.22), fill=255
-    )
-    result = Image.new('RGBA', (px, px), BG)   # dark fill for corners
-    result.paste(base, mask=mask)
-    return result
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, px - 1, px - 1], radius=int(px * radius_frac), fill=255)
+    out = Image.new('RGBA', (px, px), (0, 0, 0, 0))
+    out.paste(base, mask=mask)
+    return out
 
 
 configs = [
@@ -52,21 +45,18 @@ configs = [
 for folder, icon_px, fg_px in configs:
     path = f'android/app/src/main/res/{folder}'
     os.makedirs(path, exist_ok=True)
+    rounded(icon_px).save(f'{path}/ic_launcher.png')      # legacy, pre-rounded
+    resized(icon_px).save(f'{path}/ic_launcher_round.png')  # round variant
+    resized(fg_px).save(f'{path}/ic_launcher_foreground.png')  # adaptive foreground
 
-    # Legacy launcher icon — pre-rounded so corners always look right
-    make_icon_rounded(icon_px).save(f'{path}/ic_launcher.png')
-    # Round icon variant (circle mask handled by the OS, but give it the design)
-    make_icon(icon_px).save(f'{path}/ic_launcher_round.png')
-    # Adaptive foreground — full canvas, OS applies its own mask
-    make_icon(fg_px).save(f'{path}/ic_launcher_foreground.png')
-
-# Overwrite adaptive icon background to dark — no white leaking behind foreground
+# Adaptive background: solid brand blue (matches the mark's field) so the masked
+# icon never shows a white or transparent gap behind the foreground.
 drawable = 'android/app/src/main/res/drawable'
 os.makedirs(drawable, exist_ok=True)
 with open(f'{drawable}/ic_launcher_background.xml', 'w') as f:
     f.write('<?xml version="1.0" encoding="utf-8"?>\n'
             '<shape xmlns:android="http://schemas.android.com/apk/res/android">\n'
-            '    <solid android:color="#14161B"/>\n'
+            '    <solid android:color="#2F6BF6"/>\n'
             '</shape>\n')
 
-print('Icons written — smaller dots, rounded corners, dark background everywhere')
+print('Icons written from icon-512.png — brand blue background, rounded legacy icon')
