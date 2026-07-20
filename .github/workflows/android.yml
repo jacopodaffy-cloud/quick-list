@@ -264,7 +264,11 @@ jobs:
           # POST_NOTIFICATIONS: required on Android 13+ for due-date reminders
           # (@capacitor/local-notifications asks the user at runtime; this only
           # declares the capability — the merger dedupes if the plugin adds it too).
-          sed -i 's#</manifest>#    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove"/>\n    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove"/>\n    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove"/>\n    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_CUSTOM_AUDIENCE" tools:node="remove"/>\n    <uses-permission android:name="android.permission.USE_CREDENTIALS" tools:node="remove"/>\n    <uses-permission android:name="android.permission.DUMP" tools:node="remove"/>\n</manifest>#' "$M"
+          # RECORD_AUDIO: the mic button. Capacitor's WebChromeClient answers the
+          # WebView's RESOURCE_AUDIO_CAPTURE request by asking for RECORD_AUDIO —
+          # but only if it is declared here, so without this line voice input can
+          # never be granted in the installed app and always fails 'not-allowed'.
+          sed -i 's#</manifest>#    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove"/>\n    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove"/>\n    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove"/>\n    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_CUSTOM_AUDIENCE" tools:node="remove"/>\n    <uses-permission android:name="android.permission.USE_CREDENTIALS" tools:node="remove"/>\n    <uses-permission android:name="android.permission.DUMP" tools:node="remove"/>\n</manifest>#' "$M"
           echo "=== AndroidManifest.xml ===" ; cat "$M"
 
       - name: Set custom app icon

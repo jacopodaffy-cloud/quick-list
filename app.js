@@ -181,8 +181,13 @@ const I = {
   link: ic('<path d="M9 15l6-6"/><path d="M11 6.5l1.2-1.2a3.5 3.5 0 0 1 5 5L16 11.5"/><path d="M13 17.5l-1.2 1.2a3.5 3.5 0 0 1-5-5L8 12.5"/>'),
   camera: ic('<path d="M3 8.5A2 2 0 0 1 5 6.5h1.5l1-1.8a1.5 1.5 0 0 1 1.3-.7h4.4a1.5 1.5 0 0 1 1.3.7l1 1.8H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><circle cx="12" cy="13" r="3.3"/>'),
   image: ic('<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="m4 18 5-5 4 4 3-3 4 4"/>'),
-  flag: ic('<path d="M5 21V4"/><path d="M5 4h11l-2.5 4L16 12H5"/>'),
-  cal: ic('<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/>'),
+  // Priority — a swallowtail pennant on a full-height staff. Centred on the 24
+  // grid and drawn open (the staff IS the banner's left edge), like `pin`.
+  flag: ic('<path d="M6 21V4"/><path d="M6 4h11l-2.6 4.35L17 12.7H6"/>'),
+  // Due date — rounded card, header rule, two posts clear of the corner radius,
+  // plus a marked day. The filled dot uses the same currentColor/no-stroke
+  // treatment as `dots` and `grip`, and reads as "a date" not "a calendar".
+  cal: ic('<rect x="3" y="5" width="18" height="16" rx="4"/><path d="M3 10h18"/><path d="M8 3v4M16 3v4"/><circle cx="8.5" cy="14.6" r="1.15" fill="currentColor" stroke="none"/>'),
   bell: ic('<path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2.2 2.2 0 0 0 4 0"/>'),
   box: ic('<path d="M3 8l2-4h14l2 4"/><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M10 12h4"/>'),
   restore: ic('<path d="M3 12a9 9 0 1 0 2.64-6.36"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/>'),
@@ -1979,27 +1984,99 @@ function removeItemImage(itemId) {
 
 /* ====================== 6b. Voice ====================== */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null, listening = false;
-function toggleVoice() {
-  if (!SR) { toast("Voice input isn't supported here"); return; }
-  if (listening) { rec && rec.stop(); return; }
+let rec = null, listening = false, micGranted = false, hintTimer = 0;
+
+/* Plain-language reason for every SpeechRecognition error code. Only
+   'not-allowed' used to be handled — and onend blanked even that a moment
+   later — so any failure looked like a dead button. */
+const VOICE_ERR = {
+  'not-allowed': 'Microphone blocked — allow it in your browser settings',
+  'service-not-allowed': 'Voice input is unavailable on this device',
+  'audio-capture': 'No microphone found',
+  'network': 'Voice input needs an internet connection',
+  'no-speech': 'Didn’t catch that — tap the mic and try again',
+  'aborted': ''   // the user tapped stop: not a failure, keep what was heard
+};
+
+/* Single writer for the line under the add bar. Messages clear themselves so a
+   stale error can never sit there; '' clears immediately. */
+function voiceHint(msg) {
+  clearTimeout(hintTimer);
+  const el = $('#voice-hint'); if (!el) return;
+  el.textContent = msg || '';
+  if (msg) hintTimer = setTimeout(() => { if (!listening) el.textContent = ''; }, 4200);
+}
+
+/* Ask for the microphone explicitly BEFORE starting recognition.
+   SpeechRecognition on its own never raises a permission prompt inside an
+   Android WebView (and Safari is inconsistent), so start() just failed as
+   'not-allowed' forever with no way for the user to recover. getUserMedia
+   shows the real dialog; the track is stopped at once because recognition
+   opens its own stream. Resolves true when it's safe to proceed. */
+async function ensureMic() {
+  if (micGranted) return true;
+  const md = navigator.mediaDevices;
+  if (!md || !md.getUserMedia) return true;          // older engine: let SR try unaided
+  try {
+    const stream = await md.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => t.stop());       // release the recording light
+    micGranted = true;
+    return true;
+  } catch (e) {
+    const n = e && e.name;
+    voiceHint(n === 'NotFoundError' || n === 'DevicesNotFoundError'
+      ? 'No microphone found'
+      : 'Microphone blocked — allow it in your browser settings');
+    buzz(20);
+    return false;
+  }
+}
+
+async function toggleVoice() {
+  if (!SR) { toast("Voice input isn't supported on this browser"); return; }
+  if (listening) { try { rec && rec.stop(); } catch (e) { } return; }
+  if (!(await ensureMic())) return;
+
   rec = new SR();
   rec.lang = navigator.language || 'en-US';
   rec.interimResults = true; rec.continuous = false;
-  let finalText = '';
-  rec.onstart = () => { listening = true; $('#mic').classList.add('listening'); $('#voice-hint').textContent = 'Listening… speak your item'; buzz(10); };
+  let finalText = '', failure = '';
+
+  rec.onstart = () => {
+    listening = true;
+    $('#mic').classList.add('listening');
+    voiceHint('Listening… speak your item');
+    buzz(10);
+  };
   rec.onresult = e => {
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript; }
-    edSetText(edEl(), (finalText + interim).replace(/\s+/g, ' ').trimStart()); syncSend();
+    const el = edEl();
+    edSetText(el, (finalText + interim).replace(/\s+/g, ' ').trimStart());
+    scrollCaretIntoView(el);   // a long dictation stays visible in the composer
+    syncSend();
   };
-  rec.onerror = ev => { $('#voice-hint').textContent = ev.error === 'not-allowed' ? 'Microphone access denied' : ''; };
+  // Record the reason; onend fires straight after and used to wipe it.
+  rec.onerror = ev => {
+    failure = VOICE_ERR[ev.error] !== undefined ? VOICE_ERR[ev.error] : 'Voice input failed';
+  };
   rec.onend = () => {
-    listening = false; $('#mic').classList.remove('listening'); $('#voice-hint').textContent = '';
+    listening = false;
+    $('#mic').classList.remove('listening');
+    voiceHint(failure);                 // '' on a clean run
+    if (failure) return;                // never commit a half-heard item
     const txt = edPlain(edEl());
     if (txt) { addItems(txt); edClear(edEl()); syncSend(); }
   };
-  try { rec.start(); } catch (e) { }
+
+  try {
+    rec.start();
+  } catch (e) {
+    // start() throws InvalidStateError when a previous session is still closing
+    listening = false;
+    $('#mic').classList.remove('listening');
+    voiceHint('Voice input is busy — try again');
+  }
 }
 
 /* ====================== 6c. Drag to reorder (hold the grip) ======================
@@ -2578,7 +2655,7 @@ $('#add-input').addEventListener('keydown', e => {
 });
 // keep the :empty placeholder honest — a lone <br> left after deleting all text
 // still counts as empty (paste is handled by the document-level listener above)
-$('#add-input').addEventListener('input', () => { const el = edEl(); if (el && !el.textContent) el.innerHTML = ''; syncSend(); });
+$('#add-input').addEventListener('input', () => { const el = edEl(); if (el && !el.textContent) el.innerHTML = ''; syncSend(); scrollCaretIntoView(el); });
 $('#mic').addEventListener('click', toggleVoice);
 $('#img-btn').addEventListener('click', () => pickImageFor('new'));
 $('#img-input').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) onImagePicked(f); });
@@ -2605,6 +2682,25 @@ const edEl = () => $('#add-input');
 const edPlain = el => String((el && el.textContent) || '').replace(/\u00A0/g, ' ').trim();
 function edClear(el) { if (el) el.innerHTML = ''; }
 function edSetText(el, text) { if (el) el.textContent = text; }
+/* Keep the caret inside the visible box while typing.
+   A <textarea> scrolls to follow the caret for free; a contenteditable does
+   NOT. Once the composer hit its max-height the line being typed sat below the
+   fold with scrollTop stuck at 0 — you were writing blind. Called on every
+   input in both editors, and after each voice transcript. */
+function scrollCaretIntoView(el) {
+  if (!el || el.scrollHeight <= el.clientHeight) return;   // nothing to scroll
+  const sel = getSelection();
+  if (!sel || !sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  if (!el.contains(range.startContainer)) return;          // caret is in another field
+  const rect = range.getClientRects()[0] || range.getBoundingClientRect();
+  // A collapsed caret on a fresh line can measure as all-zero; the only way to
+  // get there is by appending, so following the bottom is the right guess.
+  if (!rect || (!rect.height && !rect.top)) { el.scrollTop = el.scrollHeight; return; }
+  const box = el.getBoundingClientRect();
+  if (rect.bottom > box.bottom) el.scrollTop += rect.bottom - box.bottom;
+  else if (rect.top < box.top) el.scrollTop -= box.top - rect.top;
+}
 function placeCaretEnd(el) {
   try {
     const r = document.createRange(); r.selectNodeContents(el); r.collapse(false);
@@ -2954,6 +3050,18 @@ document.addEventListener('focusin', e => {
 document.addEventListener('focusout', e => {
   if (!e.target.matches('#add-input, .item-edit')) return;
   setTimeout(() => { const a = document.activeElement; if (!a || !a.matches('#add-input, .item-edit')) { document.body.classList.remove('fmt-on'); $('#fmt-colors').hidden = true; $('#fmt-fills').hidden = true; $('#fmt-pris').hidden = true; } }, 60);
+});
+/* Follow the caret in BOTH editors — typing, pasting, and arrowing/clicking
+   around. The composer is the one that can overflow (it has a max-height), but
+   wiring the inline editor too keeps the behaviour identical in each. */
+document.addEventListener('input', e => {
+  const el = e.target && e.target.closest && e.target.closest('#add-input, .item-edit');
+  if (el) scrollCaretIntoView(el);
+});
+document.addEventListener('keyup', e => {
+  if (!/^(Arrow|Page|Home|End)/.test(e.key)) return;
+  const el = e.target && e.target.closest && e.target.closest('#add-input, .item-edit');
+  if (el) scrollCaretIntoView(el);
 });
 // Paste lands as PLAIN text (no foreign HTML can enter the editor). A block
 // pasted into the add bar still becomes multiple clean items, as before.

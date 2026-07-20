@@ -577,6 +577,10 @@ body.fmt-on .fmt-bar { display: flex; }
   border-radius: 11px; color: var(--ink); font-size: 15px;
   transition: transform .12s var(--ease-out), background .15s;
 }
+/* Icon glyphs match every other icon button in the app (mic 20, send 20, photo
+   21). Without this the bare <svg> stretched to fill the grid cell and rendered
+   at 40x40 — twice the intended size, and taller than the 34px button. */
+.fmt-btn svg { width: 20px; height: 20px; flex: 0 0 20px; }
 .fmt-btn b { font-weight: 800; }
 .fmt-btn u { text-underline-offset: 2px; }
 .fmt-btn:active { transform: scale(.9); background: var(--surface-2); }
@@ -622,7 +626,13 @@ body:not(.fmt-on) .fmt-colors { display: none; }   /* never without its toolbar 
   border: 0; background: transparent;
   font-size: 16px; font-weight: 500;
   padding: 10px 0;
-  max-height: 96px; overflow-y: auto;
+  /* Cap the growth, but never take more than a fifth of a short screen (small
+     phones in landscape used to give the composer most of the viewport). */
+  max-height: min(96px, 20vh); overflow-y: auto;
+  /* Keeps a line's worth of breathing room when scrollCaretIntoView() lands the
+     caret on the very edge of the box. */
+  scroll-padding-block: 4px;
+  overscroll-behavior: contain;   /* scrolling the composer never drags the page */
   white-space: pre-wrap; overflow-wrap: anywhere;
   caret-color: var(--c);
   -webkit-user-select: text; user-select: text;
