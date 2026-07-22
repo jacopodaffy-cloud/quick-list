@@ -958,6 +958,29 @@ body.view-home #scrollbar {
 .set-label { flex: 1; min-width: 0; }
 .set-title { font-size: 15.5px; font-weight: 600; }
 .set-desc { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; line-height: 1.4; }
+/* A settings row that navigates instead of toggling (Language). Same metrics as
+   .set-row so the list stays optically aligned. */
+.set-row-btn { width: 100%; text-align: left; background: none; font: inherit; color: inherit; cursor: pointer; }
+.set-row-btn:active { opacity: .6; }
+.set-value { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; font-size: 14.5px; font-weight: 600; color: var(--ink-3); }
+.set-value svg { width: 18px; height: 18px; }
+[dir="rtl"] .set-value svg { transform: scaleX(-1); }   /* chevron points the other way in RTL */
+
+/* ---- language picker ---- */
+.lang-list { max-height: min(58vh, 460px); overflow-y: auto; margin: 4px -4px 0; -webkit-overflow-scrolling: touch; }
+.lang-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 13px 10px; border-radius: 13px;
+  background: none; font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.lang-row + .lang-row { border-top: 1px solid var(--line); }
+.lang-row:active { background: var(--surface-2); }
+.lang-row.on { background: color-mix(in srgb, var(--c) 12%, transparent); }
+.lang-names { flex: 1; min-width: 0; }
+.lang-native { display: block; font-size: 15.5px; font-weight: 600; }
+.lang-en { display: block; font-size: 12.5px; color: var(--ink-3); margin-top: 1px; }
+.lang-check { flex: 0 0 auto; color: var(--c); display: grid; place-items: center; }
+.lang-check svg { width: 20px; height: 20px; }
 
 /* iOS-style toggle */
 .toggle { width: 50px; height: 30px; flex: 0 0 50px; border-radius: 999px; background: var(--line-2); position: relative; transition: background .22s var(--ease-out); }
@@ -1105,3 +1128,37 @@ body.view-home #scrollbar {
   text-decoration: none; border-radius: var(--r-pill);
   font-weight: 600; font-size: 16px;
 }
+
+/* ============================================================ RTL (Arabic)
+   The layout is overwhelmingly flexbox and logical-centre based, so only the
+   genuinely side-anchored pieces need mirroring. <html dir="rtl"> is set by
+   theme.js before first paint and by i18n.js on every language change, so
+   these rules never flash.
+   Deliberately NOT flipped: anything centred (left:50%), the symmetric
+   strike-through, and the shell-centring offsets — those are direction-neutral
+   and mirroring them would break the layout. */
+[dir="rtl"] .menu-item,
+[dir="rtl"] .set-row-btn,
+[dir="rtl"] .lang-row { text-align: right; }
+
+[dir="rtl"] .menu-item .mi-note,
+[dir="rtl"] .stat-level { margin-left: 0; margin-right: auto; }
+
+[dir="rtl"] .search-sort { margin-left: 0; margin-right: 2px; }
+[dir="rtl"] .search-sort::before { left: auto; right: -3px; }
+
+/* card corner flags */
+[dir="rtl"] .pin-flag,
+[dir="rtl"] .share-flag { right: auto; left: -7px; }
+[dir="rtl"] .badge-check { right: auto; left: 11px; }
+[dir="rtl"] .lb-close { right: auto; left: 16px; }
+
+/* floating action buttons + scroll handle move to the other edge */
+[dir="rtl"] .fab-wrap { right: auto; left: max(20px, calc(50vw - var(--shell) / 2 + 20px)); }
+[dir="rtl"] #scrollbar { right: auto; left: max(2px, calc(50vw - var(--shell) / 2 + 2px)); }
+[dir="rtl"] #scrollthumb { right: auto; left: 0; }
+[dir="rtl"] #scrollthumb::after { right: auto; left: 3px; }
+
+/* iOS-style toggle: knob starts on the right and travels the other way */
+[dir="rtl"] .toggle::after { left: auto; right: 3px; }
+[dir="rtl"] .toggle.on::after { transform: translateX(-20px); }

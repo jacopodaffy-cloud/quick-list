@@ -16,5 +16,19 @@
     var dark = t === 'dark' || (t !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
     var m = document.querySelector('meta[name="theme-color"]#tc');
     if (m) m.setAttribute('content', dark ? '#0D0E12' : '#F5F6F8');
+
+    // Language + writing direction, also before first paint: an RTL locale
+    // must not render left-to-right for a frame and then flip. i18n.js owns
+    // the full language list; this only needs to know which are RTL.
+    var RTL = { ar: 1, he: 1, fa: 1, ur: 1 };
+    var lang = s.lang;
+    if (!lang) {
+      // No saved choice yet — mirror the device so the very first paint is
+      // already in the right direction. i18n.js re-resolves this properly.
+      lang = (navigator.languages && navigator.languages[0]) || navigator.language || 'en';
+    }
+    var base = String(lang).toLowerCase().split('-')[0];
+    root.setAttribute('lang', lang);
+    root.setAttribute('dir', RTL[base] ? 'rtl' : 'ltr');
   } catch (e) { /* never block boot on a theme read */ }
 })();

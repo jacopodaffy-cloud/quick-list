@@ -42,7 +42,11 @@ jobs:
       - name: Prepare web assets
         run: |
           mkdir -p www
-          cp index.html app.css app.js theme.js manifest.webmanifest sw.js icon.svg icon-maskable.svg icon-192.png icon-512.png config.js www/
+          cp index.html app.css app.js theme.js manifest.webmanifest sw.js icon.svg icon-maskable.svg icon-192.png icon-512.png config.js i18n.js www/
+          # Translation resource files are loaded at runtime from i18n/<code>.js,
+          # so the whole folder must ship inside the APK (there is no network
+          # dependency: the app is fully self-contained).
+          cp -r i18n www/
 
       - name: Add Android platform (Capacitor)
         run: npx cap add android
