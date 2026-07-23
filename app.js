@@ -21,7 +21,7 @@
 // Keep in lockstep with versionCode in .github/workflows/android.yml — bump BOTH
 // every release (see PRD "Bump every release"), or installed apps stop noticing
 // new versions.
-const APP_VERSION_CODE = 58;
+const APP_VERSION_CODE = 59;
 
 // The public home of the web app — used for the update wall and for share links
 // (inside the APK location.origin is https://localhost, never usable in a link).
@@ -144,6 +144,8 @@ const ic = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stro
 const I = {
   plus: ic('<path d="M12 5v14M5 12h14"/>'),
   back: ic('<path d="m15 19-7-7 7-7"/>'),
+  chev: ic('<path d="m9 18 6-6-6-6"/>'),
+  tag: ic('<path d="M20.6 13.4 12 22l-9-9V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.4" fill="currentColor" stroke="none"/>'),
   dots: ic('<circle cx="5" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.7" fill="currentColor" stroke="none"/>'),
   grip: ic('<circle cx="9" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.4" fill="currentColor" stroke="none"/>'),
   tick: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="tk" d="m5 12.5 5 5L19 6"/></svg>',
@@ -201,7 +203,7 @@ const GOOGLE_G = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="t
    whether you appear on the global ranking. Theme is also bootstrapped
    in theme.js before first paint so there's no flash. */
 const SETTINGS_KEY = 'quicklist.settings';
-const DEFAULT_SETTINGS = { theme: 'system', haptics: true, leaderboard: true };
+const DEFAULT_SETTINGS = { theme: 'system', haptics: true, leaderboard: true, lang: '' };
 let settings = loadSettings();
 function loadSettings() {
   let s = {};
@@ -210,6 +212,10 @@ function loadSettings() {
   if (!['system', 'light', 'dark'].includes(out.theme)) out.theme = 'system';
   out.haptics = out.haptics !== false;
   out.leaderboard = out.leaderboard !== false;
+  // `lang` is owned by i18n.js but must live on this object too: saveSettings()
+  // rewrites the whole record, so omitting it here would wipe the user's
+  // language every time any other setting changed.
+  out.lang = typeof out.lang === 'string' ? out.lang : '';
   return out;
 }
 function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { } }
@@ -291,6 +297,8 @@ function normList(l) {
     pinned: !!l.pinned,
     tidy: !!l.tidy,
     archived: !!l.archived,
+    budget: normPrice(l.budget),
+    currency: normCcy(l.currency),
     code: (typeof l.code === 'string' && /^[A-Z0-9]{4,10}$/.test(l.code)) ? l.code : null,
     shared: !!(l.shared && typeof l.code === 'string' && /^[A-Z0-9]{4,10}$/.test(l.code)),
     createdAt: Number.isFinite(l.createdAt) ? l.createdAt : Date.now(),
@@ -307,6 +315,7 @@ function normList(l) {
         pri: [1, 2, 3, 4].includes(i.pri) ? i.pri : null,
         due: (Number.isFinite(i.due) && i.due > 0) ? Math.floor(i.due) : null,
         rem: !!(i.rem && i.due),
+        price: normPrice(i.price),
       }))
       .filter(i => i.text.length > 0 || i.img),   // keep image-only items
   };
@@ -354,9 +363,9 @@ function save() {
 }
 
 const isBgHex = s => typeof s === 'string' && /^#[0-9A-Fa-f]{6}$/.test(s);
-const mkItem = (text, done = false, qty = null, img = null, bg = null) => ({ id: uid(), text: cleanText(text, MAX.item), done: !!done, qty: qty && qty > 1 ? Math.min(999, Math.floor(qty)) : null, img: isImgData(img) ? img : null, bg: isBgHex(bg) ? bg : null, pri: null, due: null, rem: false });
+const mkItem = (text, done = false, qty = null, img = null, bg = null) => ({ id: uid(), text: cleanText(text, MAX.item), done: !!done, qty: qty && qty > 1 ? Math.min(999, Math.floor(qty)) : null, img: isImgData(img) ? img : null, bg: isBgHex(bg) ? bg : null, pri: null, due: null, rem: false, price: null });
 function mkList(color) {
-  return { id: uid(), title: '', color: color || nextColor(), items: [], pinned: false, tidy: false, createdAt: Date.now(), updatedAt: Date.now() };
+  return { id: uid(), title: '', color: color || nextColor(), items: [], pinned: false, tidy: false, budget: null, currency: null, createdAt: Date.now(), updatedAt: Date.now() };
 }
 function nextColor() { const c = PALETTE[state.nextColor % PALETTE.length].hex; state.nextColor++; return c; }
 const getList = id => state.lists.find(l => l.id === id);
@@ -365,7 +374,7 @@ function tidySort(l) { if (!l.tidy) return; const u = l.items.filter(i => !i.don
 
 /* CRUD */
 function createList() {
-  if (state.lists.length >= MAX.lists) { toast('You have reached the list limit'); return state.lists[0]; }
+  if (state.lists.length >= MAX.lists) { toast(tr('You have reached the list limit')); return state.lists[0]; }
   const l = mkList(); state.lists.unshift(l); bumpStat('created'); save(); checkBadges(); return l;
 }
 function deleteList(id) {
@@ -379,7 +388,7 @@ function deleteList(id) {
   state.trash = state.trash.slice(0, TRASH_MAX);
   save();
   if (view.name === 'detail' && view.id === id) showHome(false); else renderHome();
-  toast('List deleted', 'Undo', () => {
+  toast(tr('List deleted'), tr('Undo'), () => {
     const t = state.trash.findIndex(x => x.id === id);
     if (t >= 0) state.trash.splice(t, 1);
     state.lists.splice(Math.min(i, state.lists.length), 0, removed);
@@ -391,12 +400,12 @@ function archiveList(id) {
   const l = getList(id); if (!l) return;
   l.archived = true; touch(l); save();
   if (view.name === 'detail' && view.id === id) showHome(false); else rerender();
-  toast('List archived', 'Undo', () => { l.archived = false; touch(l); save(); rerender(); });
+  toast(tr('List archived'), tr('Undo'), () => { l.archived = false; touch(l); save(); rerender(); });
 }
 function unarchiveList(id) {
   const l = getList(id); if (!l) return;
   l.archived = false; touch(l); save(); rerender();
-  toast('Back on your home screen');
+  toast(tr('Back on your home screen'));
 }
 function restoreTrash(id) {
   const t = (state.trash || []).findIndex(x => x.id === id); if (t < 0) return;
@@ -406,12 +415,12 @@ function restoreTrash(id) {
   state.lists.unshift(list);
   if (list.shared && list.code) subscribeShared(list);
   save(); rerender();
-  toast('List restored');
+  toast(tr('List restored'));
 }
 function purgeTrash(id) {
   const t = (state.trash || []).findIndex(x => x.id === id); if (t < 0) return;
   state.trash.splice(t, 1); save();
-  toast('Deleted forever');
+  toast(tr('Deleted forever'));
 }
 function duplicateList(id) {
   const src = getList(id); if (!src) return;
@@ -419,14 +428,14 @@ function duplicateList(id) {
   // duplicate). The copy is always PRIVATE: spreading src would carry code/shared
   // over, and two local lists pushing to the same shared/{code} doc fight forever.
   const copy = { ...src, id: uid(), pinned: false, code: null, shared: false, title: src.title ? src.title + ' copy' : '', items: src.items.map(it => mkItem(it.text, it.done, it.qty, it.img, it.bg)), createdAt: Date.now(), updatedAt: Date.now() };
-  state.lists.unshift(copy); bumpStat('created'); save(); checkBadges(); openDetailFromSheet(copy.id); toast('List duplicated');
+  state.lists.unshift(copy); bumpStat('created'); save(); checkBadges(); openDetailFromSheet(copy.id); toast(tr('List duplicated'));
 }
 function clearDone(id) {
   const l = getList(id); if (!l) return;
   const removed = l.items.filter(i => i.done);
-  if (!removed.length) { toast('Nothing checked off yet'); return; }
+  if (!removed.length) { toast(tr('Nothing checked off yet')); return; }
   l.items = l.items.filter(i => !i.done); touch(l); save(); rerender();
-  toast(`Cleared ${removed.length}`, 'Undo', () => { l.items.push(...removed); tidySort(l); save(); rerender(); });
+  toast(tr('Cleared {n}', { n: removed.length }), tr('Undo'), () => { l.items.push(...removed); tidySort(l); save(); rerender(); });
 }
 function togglePin(id) {
   const l = getList(id); if (!l) return;
@@ -436,17 +445,17 @@ function togglePin(id) {
 function toggleTidy(id) {
   const l = getList(id); if (!l) return;
   l.tidy = !l.tidy; if (l.tidy) tidySort(l); touch(l); save(); rerender();
-  toast(l.tidy ? 'Checked items sink to the bottom' : 'Manual order');
+  toast(l.tidy ? tr('Checked items sink to the bottom') : tr('Manual order'));
 }
 function seed() {
   const s = blank();
-  const groc = mkList('#21A971'); groc.title = 'Weekend groceries'; groc.pinned = true; groc.tidy = true;
-  groc.items = [mkItem('Sourdough', true), mkItem('Oat milk', false, 2), mkItem('Avocados', true, 3), mkItem('Cherry tomatoes'), mkItem('Parmesan'), mkItem('Coffee beans')];
+  const groc = mkList('#21A971'); groc.title = tr('Weekend groceries'); groc.pinned = true; groc.tidy = true;
+  groc.items = [mkItem(tr('Sourdough'), true), mkItem(tr('Oat milk'), false, 2), mkItem(tr('Avocados'), true, 3), mkItem(tr('Cherry tomatoes')), mkItem(tr('Parmesan')), mkItem(tr('Coffee beans'))];
   tidySort(groc);
   const trip = mkList('#2E97E8'); trip.title = '';
-  trip.items = ['Charger', 'Passport', 'Sunglasses', 'Headphones', 'Swimsuit'].map(t => mkItem(t));
-  const ideas = mkList('#9457D6'); ideas.title = 'Weekend ideas';
-  ideas.items = ['Bike along the river', 'That new ramen place', 'Finish the book', 'Call mum'].map((t, i) => mkItem(t, i === 3));
+  trip.items = ['Charger', 'Passport', 'Sunglasses', 'Headphones', 'Swimsuit'].map(x => mkItem(tr(x)));
+  const ideas = mkList('#9457D6'); ideas.title = tr('Weekend ideas');
+  ideas.items = ['Bike along the river', 'That new ramen place', 'Finish the book', 'Call mum'].map((x, i) => mkItem(tr(x), i === 3));
   s.lists = [groc, trip, ideas]; s.nextColor = 3;
   return s;
 }
@@ -491,7 +500,7 @@ function renderStreakChip() {
 }
 function streakToast() {
   const n = statsOf().streak || 0;
-  if (n >= 2) toast(`🔥 ${n}-day streak — keep it going!`);
+  if (n >= 2) toast(tr('🔥 {n}-day streak — keep it going!', { n }));
 }
 function streakWeekHTML() {
   // The trailing 7 days: day i-ago is part of the streak when i < streak.
@@ -660,7 +669,7 @@ function checkBadges() {
     if (badgeEarned(b) && !seenBadges.has(b.id)) {
       seenBadges.add(b.id);
       buzz(18);
-      toast(`${b.icon} Badge unlocked — ${b.name}`, 'View', () => { achvTab = 'badges'; openAchievementsSheet(); });
+      toast(`${b.icon} ` + tr('Badge unlocked — {name}', { name: tr(b.name) }), tr('View'), () => { achvTab = 'badges'; openAchievementsSheet(); });
     }
   }
   // Level-up moment — fired after the badge loop so it's the toast that stays
@@ -670,7 +679,7 @@ function checkBadges() {
   if (lastLevel != null && lvl > lastLevel) {
     celebrate();
     buzz(26);
-    toast(`🎉 Level up — you reached Level ${lvl}`, 'View', () => { achvTab = 'badges'; openAchievementsSheet(); });
+    toast(tr('🎉 Level up — you reached Level {n}', { n: lvl }), tr('View'), () => { achvTab = 'badges'; openAchievementsSheet(); });
   }
   lastLevel = lvl;
   schedulePublishRank();
@@ -901,8 +910,8 @@ async function ensureShared(l) {
 async function createShare(id) {
   const l = getList(id); if (!l) return;
   if (l.shared && l.code) return openShareSheet(l);
-  if (!CLOUD_ENABLED) { toast('Cloud sharing is not set up yet'); return; }
-  toast('Creating share link…');
+  if (!CLOUD_ENABLED) { toast(tr('Cloud sharing is not set up yet')); return; }
+  toast(tr('Creating share link…'));
   try { await ensureShared(l); openShareSheet(l); }
   catch (e) { toast(shareErrMsg(e)); }
 }
@@ -910,7 +919,7 @@ function stopSharing(id) {
   const l = getList(id); if (!l) return;
   const code = l.code; l.shared = false; l.code = null; touch(l); save();
   if (code) unsubscribeShared(code);
-  closeSheet(); rerender(); toast('Stopped syncing — this copy is now private');
+  closeSheet(); rerender(); toast(tr('Stopped syncing — this copy is now private'));
 }
 async function joinByCode(raw) {
   const code = cleanCode(raw);
@@ -1234,12 +1243,12 @@ async function deleteAccount() {
     try { localStorage.removeItem(dataKeyFor(cur.uid)); } catch (e) { }                // wipe local copy
     session = null; saveSession(null);
     state = load(); refreshAccountUI(); closeSheet(); showHome(false);
-    toast('Account deleted');
+    toast(tr('Account deleted'));
   } catch (e) {
     if (e && e.code === 'auth/requires-recent-login') {
       closeSheet(); endSession(); showHome(false);
-      toast('Please sign in again, then delete your account');
-    } else toast('Could not delete account — try again');
+      toast(tr('Please sign in again, then delete your account'));
+    } else toast(tr('Could not delete account — try again'));
   }
 }
 
@@ -1292,29 +1301,57 @@ function openProfileSheet() {
 }
 /* ---- Settings ---- */
 function openSettingsSheet() {
-  const t = settings.theme;
-  const opt = (val, icon, label) => `<button class="seg-btn ${t === val ? 'on' : ''}" data-set-theme="${val}">${icon}<span>${label}</span></button>`;
+  const th = settings.theme;   // NOT `t`: that would shadow the tr() translator
+  const opt = (val, icon, label) => `<button class="seg-btn ${th === val ? 'on' : ''}" data-set-theme="${val}">${icon}<span>${esc(label)}</span></button>`;
+  const langNative = I18N ? I18N.meta().native : 'English';
   openSheet(`
-    <h2 class="sheet-title">Settings</h2>
-    <p class="sheet-sub">Personalise QuickList on this device.</p>
-    <p class="field-label">Appearance</p>
+    <h2 class="sheet-title">${esc(tr('Settings'))}</h2>
+    <p class="sheet-sub">${esc(tr('Personalise QuickList on this device.'))}</p>
+    <p class="field-label">${esc(tr('Appearance'))}</p>
     <div class="seg seg-theme">
-      ${opt('system', I.monitor, 'System')}
-      ${opt('light', I.sun, 'Light')}
-      ${opt('dark', I.moon, 'Dark')}
+      ${opt('system', I.monitor, tr('System'))}
+      ${opt('light', I.sun, tr('Light'))}
+      ${opt('dark', I.moon, tr('Dark'))}
     </div>
     <div class="set-list">
+      <button class="set-row set-row-btn" data-auth="open-language">
+        <div class="set-label"><div class="set-title">${esc(tr('Language'))}</div><div class="set-desc">${esc(tr('Choose the language for the whole app.'))}</div></div>
+        <span class="set-value">${esc(langNative)}${I.chev}</span>
+      </button>
       <div class="set-row">
-        <div class="set-label"><div class="set-title">Haptic feedback</div><div class="set-desc">Subtle vibrations on taps and actions.</div></div>
-        <button class="toggle ${settings.haptics ? 'on' : ''}" data-auth="toggle-haptics" role="switch" aria-checked="${settings.haptics}" aria-label="Haptic feedback"></button>
+        <div class="set-label"><div class="set-title">${esc(tr('Haptic feedback'))}</div><div class="set-desc">${esc(tr('Subtle vibrations on taps and actions.'))}</div></div>
+        <button class="toggle ${settings.haptics ? 'on' : ''}" data-auth="toggle-haptics" role="switch" aria-checked="${settings.haptics}" aria-label="${esc(tr('Haptic feedback'))}"></button>
       </div>
       <div class="set-row">
-        <div class="set-label"><div class="set-title">Show me on the global ranking</div><div class="set-desc">Shares only your display name and score — never your email or list contents.${CLOUD_ENABLED ? '' : ' Needs an account with cloud sync.'}</div></div>
-        <button class="toggle ${settings.leaderboard ? 'on' : ''}" data-auth="toggle-leaderboard" role="switch" aria-checked="${settings.leaderboard}" aria-label="Show me on the global ranking"></button>
+        <div class="set-label"><div class="set-title">${esc(tr('Show me on the global ranking'))}</div><div class="set-desc">${esc(tr('Shares only your display name and score — never your email or list contents.'))}${CLOUD_ENABLED ? '' : ' ' + esc(tr('Needs an account with cloud sync.'))}</div></div>
+        <button class="toggle ${settings.leaderboard ? 'on' : ''}" data-auth="toggle-leaderboard" role="switch" aria-checked="${settings.leaderboard}" aria-label="${esc(tr('Show me on the global ranking'))}"></button>
       </div>
     </div>
-    <button class="btn btn-ghost btn-block" style="margin-top:14px" data-auth="close">${I.check}<span>Done</span></button>
-    <p class="auth-foot">${I.shield}<span>Settings stay on this device and are never uploaded.</span></p>
+    <button class="btn btn-ghost btn-block" style="margin-top:14px" data-auth="close">${I.check}<span>${esc(tr('Done'))}</span></button>
+    <p class="auth-foot">${I.shield}<span>${esc(tr('Settings stay on this device and are never uploaded.'))}</span></p>
+  `);
+}
+
+/* ---- Language picker ----
+   Each language is listed in its OWN script (Italiano, 日本語, العربية) because
+   that is what a speaker of it recognises; the English name sits underneath as
+   a secondary line for anyone who landed here by accident and needs to get
+   back. Selecting applies immediately — see the data-set-lang handler. */
+function openLanguageSheet() {
+  const cur = I18N ? I18N.current() : 'en';
+  const rows = (I18N ? I18N.langs() : []).map(l => `
+    <button class="lang-row ${l.code === cur ? 'on' : ''}" data-set-lang="${esc(l.code)}" lang="${esc(l.code)}">
+      <span class="lang-names">
+        <span class="lang-native" dir="auto">${esc(l.native)}</span>
+        <span class="lang-en">${esc(tr(l.english))}</span>
+      </span>
+      ${l.code === cur ? `<span class="lang-check">${I.check}</span>` : ''}
+    </button>`).join('');
+  openSheet(`
+    <h2 class="sheet-title">${esc(tr('Language'))}</h2>
+    <p class="sheet-sub">${esc(tr('Applies straight away. Anything not yet translated stays in English.'))}</p>
+    <div class="lang-list">${rows}</div>
+    <button class="btn btn-ghost btn-block" style="margin-top:14px" data-auth="close">${I.check}<span>${esc(tr('Done'))}</span></button>
   `);
 }
 
@@ -1326,8 +1363,8 @@ function badgeCardHTML(b) {
   return `<div class="badge-card ${earned ? 'earned' : 'locked'}">
     ${earned ? `<span class="badge-check">${I.check}</span>` : ''}
     <span class="badge-ic">${b.icon}</span>
-    <span class="badge-name">${esc(b.name)}</span>
-    <span class="badge-desc">${esc(b.desc)}</span>
+    <span class="badge-name">${esc(tr(b.name))}</span>
+    <span class="badge-desc">${esc(tr(b.desc))}</span>
     ${earned ? '' : `<span class="badge-prog"><i style="width:${pct}%"></i></span>`}
   </div>`;
 }
@@ -1338,7 +1375,7 @@ function badgesHTML() {
     if (!items.length) return '';
     const got = items.filter(badgeEarned).length;
     return `<div class="badge-cat">
-      <div class="badge-cat-head"><span>${esc(cat.label)}</span><span class="badge-cat-count">${got}/${items.length}</span></div>
+      <div class="badge-cat-head"><span>${esc(tr(cat.label))}</span><span class="badge-cat-count">${got}/${items.length}</span></div>
       <div class="badge-grid">${items.map(badgeCardHTML).join('')}</div>
     </div>`;
   }).join('');
@@ -1397,19 +1434,20 @@ function setAchvTab(tab) {
 async function handleAuth(kind) {
   if (kind === 'toggle') { authMode = authMode === 'signin' ? 'signup' : 'signin'; return openAccountSheet(); }
   if (kind === 'close') return closeSheet();
+  if (kind === 'open-language') return openLanguageSheet();
   if (kind === 'go-signin') { authMode = 'signin'; return openAccountSheet(); }
   if (kind === 'toggle-haptics') { settings.haptics = !settings.haptics; saveSettings(); buzz(12); return openSettingsSheet(); }
   if (kind === 'toggle-leaderboard') {
     settings.leaderboard = !settings.leaderboard; saveSettings();
-    if (settings.leaderboard) { publishLeaderboard(); toast('You\'re on the ranking'); }
-    else { removeFromLeaderboard(); toast('Hidden from the ranking'); }
+    if (settings.leaderboard) { publishLeaderboard(); toast(tr('You\'re on the ranking')); }
+    else { removeFromLeaderboard(); toast(tr('Hidden from the ranking')); }
     return openSettingsSheet();
   }
   if (kind === 'guest') { closeSheet(); return; }
-  if (kind === 'signout') { closeSheet(); endSession(); showHome(false); toast('Signed out'); return; }
+  if (kind === 'signout') { closeSheet(); endSession(); showHome(false); toast(tr('Signed out')); return; }
   if (kind === 'sync') {
-    try { const r = await cloudPull(session.uid); if (r) { state = mergeStates(r, state); writeData(activeKey(), state); cloudPush(); rerender(); } toast('Synced'); }
-    catch (e) { toast('Could not sync right now'); }
+    try { const r = await cloudPull(session.uid); if (r) { state = mergeStates(r, state); writeData(activeKey(), state); cloudPush(); rerender(); } toast(tr('Synced')); }
+    catch (e) { toast(tr('Could not sync right now')); }
     return;
   }
   if (kind === 'forgot') {
@@ -1431,7 +1469,7 @@ async function handleAuth(kind) {
     if (!CLOUD_ENABLED) { setAuthError('Google sign-in needs cloud setup (one-time). You can still use a device account below.'); return; }
     const blk = rlBlocked(); if (blk) { setAuthError(rlMessage(blk)); return; }
     setAuthBusy(true);
-    try { await doGoogle(); rlReset(); closeSheet(); showHome(false); toast('Signed in with Google'); }
+    try { await doGoogle(); rlReset(); closeSheet(); showHome(false); toast(tr('Signed in with Google')); }
     catch (e) { rlRecordFail(); setAuthError(humanAuthError(e)); }
     setAuthBusy(false);
   }
@@ -1512,11 +1550,11 @@ async function handleResetSubmit(form) {
     const c = await ensureCloud();
     resetThrottle.recordFail();   // count every request, sent or not
     await c.authm.sendPasswordResetEmail(c.auth, email);
-    closeSheet(); toast('If that email has an account, a reset link is on its way');
+    closeSheet(); toast(tr('If that email has an account, a reset link is on its way'));
   } catch (e) {
     // "user-not-found" would confirm which emails are registered — answer
     // exactly like a success instead.
-    if (((e && e.code) || '') === 'auth/user-not-found') { closeSheet(); toast('If that email has an account, a reset link is on its way'); return; }
+    if (((e && e.code) || '') === 'auth/user-not-found') { closeSheet(); toast(tr('If that email has an account, a reset link is on its way')); return; }
     if (err) err.textContent = humanAuthError(e);
     if (btn) { btn.disabled = false; btn.textContent = 'Send reset link'; }
   }
@@ -1592,7 +1630,7 @@ function showDetail(id, push = true) {
   const d = $('#page-detail'); d.hidden = false;
   d.style.animation = 'none'; void d.offsetWidth; d.style.animation = '';
   edClear(edEl()); pendingBg = null; applyAddbarBg();
-  pendingPri = null; pendingDue = null; pendingRem = false; renderPendChips();
+  pendingPri = null; pendingDue = null; pendingRem = false; pendingPrice = null; renderPendChips();
   syncSend();
   document.body.classList.remove('fmt-on', 'view-home', 'view-streak');
   document.body.classList.add('view-detail');
@@ -1684,7 +1722,7 @@ function ListCard(l) {
       <span class="swatch-dot">${l.pinned ? `<span class="pin-flag">${I.pin}</span>` : ''}${l.shared ? `<span class="share-flag" aria-label="Shared list">${I.users}</span>` : ''}</span>
       <span class="card-menu" data-menu="${l.id}" role="button" aria-label="List options">${I.dots}</span>
     </span>
-    <span class="card-title ${t ? '' : 'untitled'}">${t ? hl(t, q) : 'Untitled'}</span>
+    <span class="card-title ${t ? '' : 'untitled'}">${t ? hl(t, q) : esc(tr('Untitled'))}</span>
     ${total ? `<span class="card-preview">${previewItems(l, q).map(it =>
       `<span class="pl ${it.done ? 'done' : ''}">${hl(stripFmt(it.text), q)}</span>`).join('')}</span>` : ''}
     <span class="card-foot">
@@ -1715,9 +1753,55 @@ function dueLabel(ts) {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
     + (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '') + time;
 }
-const itemMetaHTML = it => (it.pri || it.due) ? `<span class="item-meta">
+/* ====================== Budget & prices ======================
+   A list can carry a budget and every item a unit price, so QuickList adds the
+   list up as you shop. Totals are ALWAYS recomputed from the items — nothing is
+   cached — so an edited price, quantity or deletion can never leave a stale sum.
+   Amounts are plain numbers in the list's own currency: no FX, no conversion. */
+const normPrice = v => (Number.isFinite(v) && v > 0) ? Math.min(99999999, Math.round(v * 100) / 100) : null;
+const normCcy = c => (typeof c === 'string' && /^[A-Z]{3}$/.test(c)) ? c : null;
+
+/* A sensible default per shipped language; overridable per list. */
+const CCY_BY_LANG = { en: 'USD', it: 'EUR', es: 'EUR', fr: 'EUR', de: 'EUR', nl: 'EUR', 'pt-BR': 'BRL', pl: 'PLN', ru: 'RUB', tr: 'TRY', 'zh-Hans': 'CNY', ja: 'JPY', ar: 'SAR', hi: 'INR' };
+const CCY_CHOICES = ['EUR', 'USD', 'GBP', 'CHF', 'BRL', 'PLN', 'RUB', 'TRY', 'CNY', 'JPY', 'INR', 'SEK', 'CAD', 'AUD'];
+const defaultCcy = () => CCY_BY_LANG[(window.I18N && I18N.current()) || 'en'] || 'EUR';
+const listCcy = l => (l && l.currency) || defaultCcy();
+const viewCcy = () => listCcy(getList(view.id));
+
+/* Intl handles symbol placement, separators and non-decimal currencies (JPY has
+   no minor unit) correctly per language, so never hand-format money. */
+function money(n, ccy) {
+  const v = Number(n) || 0;
+  try {
+    return new Intl.NumberFormat((window.I18N && I18N.bcp47()) || undefined, { style: 'currency', currency: ccy || defaultCcy() }).format(v);
+  } catch (e) { return (ccy || '') + ' ' + v.toFixed(2); }
+}
+/* A line costs unit price x quantity — the qty pill already means "times N". */
+const itemCost = it => (it.price ? it.price * (it.qty > 1 ? it.qty : 1) : 0);
+const listTotal = l => l.items.reduce((sum, i) => sum + itemCost(i), 0);
+const listChecked = l => l.items.reduce((sum, i) => sum + (i.done ? itemCost(i) : 0), 0);
+/* The budget bar only earns its space once there is something to show. */
+const hasMoney = l => !!(l && (l.budget || l.items.some(i => i.price)));
+
+/* Pull a price out of typed text: "Milk 2.50", "EUR3", "4,20". Deliberately
+   conservative — a bare integer ("Vitamin 3", "Level 5") is NOT a price, so a
+   token needs either a currency symbol or a real decimal. parseQty runs first,
+   so an "x2" token is already gone before this sees the line. */
+const PRICE_RE = /(?:^|\s)(?:([€$£¥₹₺₽])\s?(\d{1,7}(?:[.,]\d{1,2})?)|(\d{1,7}(?:[.,]\d{1,2})?)\s?([€$£¥₹₺₽])|(\d{1,7}[.,]\d{2}))(?=\s|$)/;
+function parsePrice(text) {
+  const t0 = String(text == null ? '' : text);
+  const m = t0.match(PRICE_RE);
+  if (!m) return { text: t0, price: null };
+  const price = normPrice(parseFloat(String(m[2] || m[3] || m[5]).replace(',', '.')));
+  if (!price) return { text: t0, price: null };
+  const rest = (t0.slice(0, m.index) + ' ' + t0.slice(m.index + m[0].length)).replace(/\s{2,}/g, ' ').trim();
+  return { text: rest, price };
+}
+
+const itemMetaHTML = it => (it.pri || it.due || it.price) ? `<span class="item-meta">
     ${it.pri ? `<span class="pri-flag" style="--pc:${PRI[it.pri].color}">${I.flag}${PRI[it.pri].label}</span>` : ''}
     ${it.due ? `<span class="due-chip ${!it.done && it.due < Date.now() ? 'over' : ''}">${I.cal}${esc(dueLabel(it.due))}${it.rem ? I.bell : ''}</span>` : ''}
+    ${it.price ? `<button type="button" class="price-chip" data-price="${it.id}" aria-label="${esc(tr('Price'))}">${I.tag}${esc(money(itemCost(it), viewCcy()))}</button>` : ''}
   </span>` : '';
 
 function ItemRow(it) {
@@ -1824,6 +1908,7 @@ function renderDetail() {
   $('#detail-meta').innerHTML = `<span class="chip-color"></span>${total ? `${done} of ${total} done` : 'Empty list'}${l.pinned ? ' · pinned' : ''}${l.shared ? ' · shared' : ''}`;
   $('#progress').style.display = total ? '' : 'none';
   $('#progress-fill').style.width = (total ? Math.round(done / total * 100) : 0) + '%';
+  renderBudgetBar(l);
 
   const wrap = $('#items');
   if (total) {
@@ -1862,19 +1947,24 @@ function parseQty(text) {
 }
 function smartLine(line) {
   const done = /^\s*(?:[-*•]\s*)?\[\s*[xX]\s*\]/.test(line);
-  const { text, qty } = parseQty(stripMarker(line).trim());
-  return text ? { text, qty, done } : null;
+  const q = parseQty(stripMarker(line).trim());
+  const pr = parsePrice(q.text);          // qty first, so "x2" never reads as money
+  return pr.text ? { text: pr.text, qty: q.qty, done, price: pr.price } : null;
 }
 function addItems(raw) {
   const l = getList(view.id); if (!l) return;
   // split on new lines first (preserves per-line markers), then commas within a line
-  const parts = raw.split(/\r?\n/).flatMap(line => line.split(',')).map(s => s.trim()).filter(Boolean);
+  // Split on newlines, then on commas that SEPARATE items — never on a decimal
+  // comma. Most of the world writes "1,20", and the old plain split(',') tore
+  // that into two items ("Bread 1" and "20"), losing the price entirely.
+  const parts = raw.split(/\r?\n/).flatMap(line => line.split(/,(?!\d{1,2}\b)/)).map(s => s.trim()).filter(Boolean);
   let added = 0;
   for (const p of parts) {
     const it = smartLine(p);
     if (it) {
       const m = mkItem(it.text, it.done, it.qty, null, pendingBg);
       m.pri = pendingPri; m.due = pendingDue; m.rem = !!(pendingDue && pendingRem);
+      m.price = it.price || pendingPrice;   // a typed price wins over the pending chip
       l.items.push(m); added++;
     }
   }
@@ -1937,9 +2027,9 @@ async function onImagePicked(file) {
   if (!file) return;
   if (view.name !== 'detail') return;
   try {
-    toast('Adding photo…');
+    toast(tr('Adding photo…'));
     const data = await compressImage(file);
-    if (data.length > MAX.img) { toast('That photo is too large'); return; }
+    if (data.length > MAX.img) { toast(tr('That photo is too large')); return; }
     const l = getList(view.id); if (!l) return;
     const target = imgTarget;
     if (target !== 'new') {
@@ -1981,7 +2071,7 @@ function removeItemImage(itemId) {
   const l = getList(view.id); const it = l && l.items.find(i => i.id === itemId); if (!it) return;
   it.img = null;
   if (!it.text.trim()) { const idx = l.items.indexOf(it); if (idx >= 0) l.items.splice(idx, 1); }   // image-only item → remove when emptied
-  touch(l); save(); buzz(8); renderDetail(); toast('Photo removed');
+  touch(l); save(); buzz(8); renderDetail(); toast(tr('Photo removed'));
 }
 
 /* ====================== 6b. Voice ====================== */
@@ -1991,13 +2081,20 @@ let rec = null, listening = false, micGranted = false, hintTimer = 0;
 /* Plain-language reason for every SpeechRecognition error code. Only
    'not-allowed' used to be handled — and onend blanked even that a moment
    later — so any failure looked like a dead button. */
-const VOICE_ERR = {
+/* Resolved at call time, never at parse time: this module is evaluated before
+   I18N.boot() finishes, so a pre-built table would freeze the English text. */
+const VOICE_ERR_KEYS = {
   'not-allowed': 'Microphone blocked — allow it in your browser settings',
   'service-not-allowed': 'Voice input is unavailable on this device',
   'audio-capture': 'No microphone found',
   'network': 'Voice input needs an internet connection',
   'no-speech': 'Didn’t catch that — tap the mic and try again',
   'aborted': ''   // the user tapped stop: not a failure, keep what was heard
+};
+const voiceErr = code => {
+  const key = VOICE_ERR_KEYS[code];
+  if (key === '') return '';
+  return key ? tr(key) : tr('Voice input failed — please try again');
 };
 
 /* Single writer for the line under the add bar. Messages clear themselves so a
@@ -2027,27 +2124,28 @@ async function ensureMic() {
   } catch (e) {
     const n = e && e.name;
     voiceHint(n === 'NotFoundError' || n === 'DevicesNotFoundError'
-      ? 'No microphone found'
-      : 'Microphone blocked — allow it in your browser settings');
+      ? tr('No microphone found')
+      : tr('Microphone blocked — allow it in your browser settings'));
     buzz(20);
     return false;
   }
 }
 
 async function toggleVoice() {
-  if (!SR) { toast("Voice input isn't supported on this browser"); return; }
+  if (!SR) { toast(tr("Voice input isn't supported on this browser")); return; }
   if (listening) { try { rec && rec.stop(); } catch (e) { } return; }
   if (!(await ensureMic())) return;
 
   rec = new SR();
-  rec.lang = navigator.language || 'en-US';
+  // Dictate in the language the user picked in Settings, not the browser's.
+  rec.lang = (window.I18N && I18N.bcp47()) || navigator.language || 'en-US';
   rec.interimResults = true; rec.continuous = false;
   let finalText = '', failure = '';
 
   rec.onstart = () => {
     listening = true;
     $('#mic').classList.add('listening');
-    voiceHint('Listening… speak your item');
+    voiceHint(tr('Listening… speak your item'));
     buzz(10);
   };
   rec.onresult = e => {
@@ -2060,7 +2158,7 @@ async function toggleVoice() {
   };
   // Record the reason; onend fires straight after and used to wipe it.
   rec.onerror = ev => {
-    failure = VOICE_ERR[ev.error] !== undefined ? VOICE_ERR[ev.error] : 'Voice input failed';
+    failure = voiceErr(ev.error);
   };
   rec.onend = () => {
     listening = false;
@@ -2077,7 +2175,7 @@ async function toggleVoice() {
     // start() throws InvalidStateError when a previous session is still closing
     listening = false;
     $('#mic').classList.remove('listening');
-    voiceHint('Voice input is busy — try again');
+    voiceHint(tr('Voice input is busy — try again'));
   }
 }
 
@@ -2221,7 +2319,7 @@ function toggleItem(itemId) {
   const done = l.items.filter(i => i.done).length, total = l.items.length;
   $('#progress-fill').style.width = Math.round(done / total * 100) + '%';
   $('#detail-meta').innerHTML = `<span class="chip-color"></span>${done} of ${total} done${l.pinned ? ' · pinned' : ''}${l.shared ? ' · shared' : ''}`;
-  if (nowComplete && !wasComplete) { celebrate(); toast('🎉 List complete · +15 points'); }
+  if (nowComplete && !wasComplete) { celebrate(); toast(tr('🎉 List complete · +15 points')); }
   checkBadges();
 }
 function deleteItem(itemId) {
@@ -2230,7 +2328,7 @@ function deleteItem(itemId) {
   const row = document.querySelector(`.item[data-id="${itemId}"]`);
   const [removed] = l.items.splice(idx, 1); touch(l); save(); buzz(12);
   if (row) { row.classList.add('removing'); setTimeout(renderDetail, 180); } else renderDetail();
-  toast('Item deleted', 'Undo', () => { l.items.splice(idx, 0, removed); save(); renderDetail(); });
+  toast(tr('Item deleted'), tr('Undo'), () => { l.items.splice(idx, 0, removed); save(); renderDetail(); });
 }
 function beginEdit(itemId) {
   const l = getList(view.id); if (!l) return;
@@ -2274,7 +2372,7 @@ function listToText(l) {
    the link lands in the same live list. No cloud → text only, like before. */
 async function shareWhatsApp(id) {
   const l = getList(id); if (!l) return;
-  if (!l.items.length) { toast('Add an item first'); return; }
+  if (!l.items.length) { toast(tr('Add an item first')); return; }
   let link = '';
   if (CLOUD_ENABLED) {
     try {
@@ -2288,17 +2386,17 @@ async function shareWhatsApp(id) {
   const w = window.open(url, '_blank', 'noopener');
   // Popup blockers can eat a window.open that follows a network wait — offer
   // the same link again from a direct tap, which is always allowed.
-  if (!w) toast('List ready to share', 'Open WhatsApp', () => window.open(url, '_blank', 'noopener'));
+  if (!w) toast(tr('List ready to share'), tr('Open WhatsApp'), () => window.open(url, '_blank', 'noopener'));
 }
 async function copyList(id) {
   const l = getList(id); if (!l) return;
-  if (!l.items.length) { toast('Add an item first'); return; }
+  if (!l.items.length) { toast(tr('Add an item first')); return; }
   const text = listToText(l);
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
     else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
-    buzz(10); toast('Copied as text');
-  } catch (e) { toast('Could not copy'); }
+    buzz(10); toast(tr('Copied as text'));
+  } catch (e) { toast(tr('Could not copy')); }
 }
 
 /* ====================== 6f. Sheets ====================== */
@@ -2355,6 +2453,7 @@ function openDetailMenu(id) {
       <button class="menu-item ${l.tidy ? 'on' : ''}" data-act="tidy" data-id="${id}">${I.sink} Keep checked at bottom <span class="mi-note">${l.tidy ? 'On' : 'Off'}</span></button>
       <button class="menu-item" data-act="color" data-id="${id}">${I.palette} Change colour</button>
       <button class="menu-item ${l.shared ? 'on' : ''}" data-act="share" data-id="${id}">${I.users} ${l.shared ? 'Sharing — show code' : 'Share &amp; collaborate'}${l.shared ? ` <span class="mi-note">${esc(l.code)}</span>` : ''}</button>
+      <button class="menu-item" data-budget-open="${id}">${I.tag} ${esc(tr('Budget'))}${l.budget ? ` <span class="mi-note">${esc(money(l.budget, listCcy(l)))}</span>` : ''}</button>
       <button class="menu-item" data-act="cleardone" data-id="${id}">${I.broom} Clear checked items</button>
       <button class="menu-item" data-act="duplicate" data-id="${id}">${I.duplicate} Duplicate list</button>
       <button class="menu-item" data-act="archive" data-id="${id}">${I.box} Archive list</button>
@@ -2431,11 +2530,11 @@ async function handleJoinLink() {
   try { code = cleanCode(new URLSearchParams(location.search).get('join')); } catch (e) { }
   if (!code || code.length < 4) return;
   try { history.replaceState(null, '', location.pathname); } catch (e) { }
-  toast('Opening the shared list…');
+  toast(tr('Opening the shared list…'));
   try {
     const l = await joinByCode(code);
     showDetail(l.id);
-    toast('Joined the list');
+    toast(tr('Joined the list'));
   } catch (e) { toast(shareErrMsg(e)); }
 }
 
@@ -2449,7 +2548,7 @@ async function handleJoinSubmit(form) {
     // Deterministic hand-off from the join sheet to the list (no history race) so
     // the back button leaves the list on the first tap. See openDetailFromSheet.
     openDetailFromSheet(l.id);
-    toast('Joined the list');
+    toast(tr('Joined the list'));
   } catch (e) {
     if (err) err.textContent = shareErrMsg(e);
     if (btn) { btn.disabled = false; btn.textContent = 'Join list'; }
@@ -2468,8 +2567,8 @@ async function copyCode(id) {
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(l.code);
     else { const ta = document.createElement('textarea'); ta.value = l.code; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
-    buzz(10); toast('Code copied');
-  } catch (e) { toast('Could not copy'); }
+    buzz(10); toast(tr('Code copied'));
+  } catch (e) { toast(tr('Could not copy')); }
 }
 
 /* ====================== 6g. Scroll + minimal custom scrollbar ======================
@@ -2547,7 +2646,7 @@ function toast(msg, actionLabel, fn) {
 
 /* ====================== Event wiring ====================== */
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-open],[data-menu],[data-new],[data-act],[data-color],[data-check],[data-qty],[data-del],[data-sort],[data-filter],[data-clear-filters],[data-toast-action],[data-auth],[data-set-theme],[data-achv-tab],[data-open-archived],[data-open-trash],[data-due-q],[data-due-rem],[data-due-remove],[data-pend-clear]');
+  const t = e.target.closest('[data-open],[data-menu],[data-new],[data-act],[data-color],[data-check],[data-qty],[data-del],[data-sort],[data-filter],[data-clear-filters],[data-toast-action],[data-auth],[data-set-theme],[data-achv-tab],[data-open-archived],[data-open-trash],[data-due-q],[data-due-rem],[data-due-remove],[data-pend-clear],[data-set-lang],[data-price],[data-price-remove],[data-budget-remove],[data-budget-open]');
   if (!t) return;
 
   if (t.dataset.setTheme) { setTheme(t.dataset.setTheme); buzz(8); return openSettingsSheet(); }
@@ -2565,7 +2664,27 @@ document.addEventListener('click', e => {
     const k = t.dataset.pendClear;
     if (k === 'pri') pendingPri = null;
     if (k === 'due') { pendingDue = null; pendingRem = false; }
+    if (k === 'price') pendingPrice = null;
     renderPendChips(); buzz(6); return;
+  }
+  if (t.dataset.price) { openPriceSheet(t.dataset.price); return; }
+  if (t.hasAttribute('data-price-remove')) { applyPrice(null); return; }
+  if (t.dataset.budgetOpen) { openBudgetSheet(t.dataset.budgetOpen); return; }
+  if (t.dataset.budgetRemove) {
+    const bl = getList(t.dataset.budgetRemove);
+    if (bl) { bl.budget = null; touch(bl); save(); noAnim = true; renderDetail(); }
+    closeSheet(); buzz(8); toast(tr('Budget removed'));
+    return;
+  }
+  if (t.dataset.setLang) {
+    const code = t.dataset.setLang;
+    if (window.I18N && code !== I18N.current()) {
+      settings.lang = code; saveSettings(); buzz(12);
+      // onChange → relocalize() repaints the app; reopen the picker so the
+      // user sees the new language applied to the sheet they are looking at.
+      I18N.setLang(code).then(() => openLanguageSheet());
+    }
+    return;
   }
   if (t.dataset.auth) return handleAuth(t.dataset.auth);
   if (t.dataset.menu) { e.stopPropagation(); return openListMenu(t.dataset.menu); }
@@ -2823,12 +2942,13 @@ function setContainerBg(hex) {
    Same dual targeting as the container colour: while editing an item they apply
    to THAT item instantly; from the add bar they park as pending chips shown
    above the composer and ride along with the next item added. */
-let pendingPri = null, pendingDue = null, pendingRem = false;
+let pendingPri = null, pendingDue = null, pendingRem = false, pendingPrice = null;
 function renderPendChips() {
   const el = $('#pend-chips'); if (!el) return;
   const chips = [];
   if (pendingPri) chips.push(`<button class="pend-chip" data-pend-clear="pri" style="--pc:${PRI[pendingPri].color}" aria-label="Remove priority">${I.flag}<span>${PRI[pendingPri].label}</span>${I.x}</button>`);
   if (pendingDue) chips.push(`<button class="pend-chip" data-pend-clear="due" aria-label="Remove due date">${I.cal}<span>${esc(dueLabel(pendingDue))}</span>${pendingRem ? I.bell : ''}${I.x}</button>`);
+  if (pendingPrice) chips.push(`<button class="pend-chip" data-pend-clear="price" aria-label="${esc(tr('Remove price'))}">${I.tag}<span>${esc(money(pendingPrice, viewCcy()))}</span>${I.x}</button>`);
   el.innerHTML = chips.join('');
   el.hidden = !chips.length;
 }
@@ -2914,6 +3034,109 @@ function applyDue(ts) {
   buzz(8);
   toast(ts ? 'Due ' + dueLabel(ts) : 'Due date removed');
 }
+
+/* ---- budget bar (detail view) ----
+   Sits under the completion progress and only appears once the list actually
+   involves money. With no budget set it still shows the running total, so
+   pricing items is useful on its own. */
+function renderBudgetBar(l) {
+  const el = $('#budget-bar'); if (!el) return;
+  if (!hasMoney(l)) { el.hidden = true; el.innerHTML = ''; return; }
+  const ccy = listCcy(l), spent = listTotal(l), bud = l.budget || 0;
+  const over = bud > 0 && spent > bud;
+  const pct = bud > 0 ? Math.min(100, Math.round(spent / bud * 100)) : 0;
+  el.hidden = false;
+  el.classList.toggle('over', over);
+  el.dataset.budgetOpen = l.id;
+  el.innerHTML = `
+    <span class="bud-row">
+      <span class="bud-total">${I.tag}${esc(money(spent, ccy))}</span>
+      <span class="bud-of">${bud > 0 ? esc(tr('of {total}', { total: money(bud, ccy) })) : esc(tr('Set a budget'))}</span>
+      ${bud > 0 ? `<span class="bud-left">${esc(over
+        ? tr('{amount} over', { amount: money(spent - bud, ccy) })
+        : tr('{amount} left', { amount: money(bud - spent, ccy) }))}</span>` : ''}
+    </span>
+    ${bud > 0 ? `<span class="bud-track"><i style="width:${pct}%"></i></span>` : ''}`;
+}
+
+/* ---- budget sheet (per list) ---- */
+function openBudgetSheet(id) {
+  const l = getList(id); if (!l) return;
+  const ccy = listCcy(l);
+  const opts = [...new Set([ccy, ...CCY_CHOICES])]
+    .map(c => `<option value="${c}"${c === ccy ? ' selected' : ''}>${c}</option>`).join('');
+  openSheet(`
+    <h2 class="sheet-title">${esc(tr('Budget'))}</h2>
+    <p class="sheet-sub">${esc(tr('Set a spending limit — QuickList adds up the prices for you.'))}</p>
+    <form id="budget-form" class="due-form" data-id="${id}">
+      <input class="field" type="number" id="budget-amount" inputmode="decimal" step="0.01" min="0"
+             placeholder="0.00" value="${l.budget || ''}" aria-label="${esc(tr('Budget'))}">
+      <select class="field field-ccy" id="budget-ccy" aria-label="${esc(tr('Currency'))}">${opts}</select>
+      <button class="btn btn-c" type="submit" style="--c:#5A63E0;--on:#fff">${esc(tr('Save'))}</button>
+    </form>
+    <div class="set-list">
+      <div class="set-row">
+        <div class="set-label"><div class="set-title">${esc(tr('Total'))}</div><div class="set-desc">${esc(tr('Every item price × its quantity.'))}</div></div>
+        <span class="set-value">${esc(money(listTotal(l), ccy))}</span>
+      </div>
+      <div class="set-row">
+        <div class="set-label"><div class="set-title">${esc(tr('Checked'))}</div><div class="set-desc">${esc(tr('What you have already ticked off.'))}</div></div>
+        <span class="set-value">${esc(money(listChecked(l), ccy))}</span>
+      </div>
+    </div>
+    <p class="auth-foot">${I.tag}<span>${esc(tr('Tip: type the price with the item — “Milk 2.50”.'))}</span></p>
+    ${l.budget ? `<button class="btn btn-ghost btn-block" data-budget-remove="${id}" style="margin-top:8px">${I.x}<span>${esc(tr('Remove budget'))}</span></button>` : ''}
+  `);
+}
+function saveBudget(form) {
+  const l = getList(form.dataset.id); if (!l) return closeSheet();
+  const amount = normPrice(parseFloat(String($('#budget-amount').value).replace(',', '.')));
+  const ccy = normCcy(($('#budget-ccy') || {}).value);
+  l.budget = amount; l.currency = ccy || l.currency;
+  touch(l); save(); noAnim = true; renderDetail();
+  closeSheet(); buzz(8);
+  toast(amount ? tr('Budget saved') : tr('Budget removed'));
+}
+
+/* ---- price sheet (per item, or pending for the next one added) ---- */
+let priceTarget = null;
+function openPriceSheet(target) {
+  const l = getList(view.id); if (!l) return;
+  let cur = null;
+  if (target !== 'pending') {
+    const it = l.items.find(i => i.id === target); if (!it) return;
+    cur = it.price;
+  } else cur = pendingPrice;
+  priceTarget = target;
+  openSheet(`
+    <h2 class="sheet-title">${esc(tr('Price'))}</h2>
+    <p class="sheet-sub">${esc(tr('Counts towards the list total.'))}</p>
+    <form id="price-form" class="due-form">
+      <input class="field" type="number" id="price-amount" inputmode="decimal" step="0.01" min="0"
+             placeholder="0.00" value="${cur || ''}" aria-label="${esc(tr('Price'))}">
+      <button class="btn btn-c" type="submit" style="--c:#5A63E0;--on:#fff">${esc(tr('Set'))}</button>
+    </form>
+    ${cur ? `<button class="btn btn-ghost btn-block" data-price-remove style="margin-top:8px">${I.x}<span>${esc(tr('Remove price'))}</span></button>` : ''}
+  `);
+}
+function applyPrice(v) {
+  const price = normPrice(typeof v === 'number' ? v : parseFloat(String(v == null ? '' : v).replace(',', '.')));
+  if (priceTarget === 'pending') { pendingPrice = price; renderPendChips(); }
+  else {
+    const l = getList(view.id); const it = l && l.items.find(i => i.id === priceTarget);
+    if (it) { it.price = price; touch(l); save(); noAnim = true; renderDetail(); }
+  }
+  closeSheet(); buzz(8);
+  toast(price ? tr('Price set') : tr('Price removed'));
+}
+/* Sheet forms are rebuilt on every open, so listen at the document level.
+   Scoped by id so the add bar's own submit is untouched. */
+document.addEventListener('submit', e => {
+  const f = e.target;
+  if (!f || !f.id) return;
+  if (f.id === 'price-form') { e.preventDefault(); applyPrice($('#price-amount').value); }
+  else if (f.id === 'budget-form') { e.preventDefault(); saveBudget(f); }
+});
 
 /* ---- reminders engine ----
    In the installed app, @capacitor/local-notifications schedules REAL OS
@@ -3024,11 +3247,12 @@ document.addEventListener('pointerdown', e => {
   // The due button deliberately does NOT preventDefault: the editor should blur
   // (committing an in-progress edit) before the sheet opens. Grab the target
   // item NOW, while the editor still exists.
-  if (kind === 'due') {
+  if (kind === 'due' || kind === 'price') {
     const a = document.activeElement;
     const row = a && a.classList.contains('item-edit') ? a.closest('.item') : null;
     const target = row ? row.dataset.id : 'pending';
-    setTimeout(() => openDueSheet(target), 120);
+    const open = kind === 'due' ? openDueSheet : openPriceSheet;
+    setTimeout(() => open(target), 120);
     buzz(6);
     return;
   }
@@ -3115,7 +3339,50 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* ====================== 7. Init ====================== */
+/* ====================== i18n glue ====================== */
+/* Translate the static markup that lives in index.html.
+
+   The ORIGINAL English text is snapshotted into a data-* attribute on the
+   first pass — which runs before anything dynamic is rendered — and every
+   later pass translates from that snapshot. Without the snapshot a second
+   pass would feed an already-translated string back in as the lookup key and
+   permanently lose the original. */
+let staticI18nReady = false;
+function applyStaticI18n() {
+  const swap = (sel, attr, cache) => document.querySelectorAll(sel).forEach(el => {
+    if (!staticI18nReady && !el.dataset[cache]) el.dataset[cache] = el.getAttribute(attr) || '';
+    if (el.dataset[cache]) el.setAttribute(attr, tr(el.dataset[cache]));
+  });
+  swap('[aria-label]', 'aria-label', 'i18nAria');
+  swap('[placeholder]', 'placeholder', 'i18nPh');
+  swap('[data-ph]', 'data-ph', 'i18nDph');
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    if (!staticI18nReady && !el.dataset.i18nText) el.dataset.i18nText = el.textContent.trim();
+    if (el.dataset.i18nText) el.textContent = tr(el.dataset.i18nText);
+  });
+  // The FAB keeps its icon <span> and carries its label as a trailing text node.
+  const fab = $('#fab');
+  if (fab && fab.lastChild && fab.lastChild.nodeType === 3) {
+    if (!staticI18nReady && !fab.dataset.i18nText) fab.dataset.i18nText = fab.lastChild.nodeValue.trim();
+    if (fab.dataset.i18nText) fab.lastChild.nodeValue = tr(fab.dataset.i18nText);
+  }
+  document.title = tr('QuickList — lists, by color');
+  staticI18nReady = true;
+}
+
+/* Re-render everything after a language change. Sheets are rebuilt rather than
+   patched because their markup was generated in the previous language. */
+function relocalize() {
+  applyStaticI18n();
+  renderHome();
+  renderStreakChip();
+  if (view.name === 'detail') renderDetail();
+  if (view.name === 'streak') renderStreakPage();
+}
+
 function init() {
+  applyStaticI18n();            // translate the shell BEFORE the first render
+  if (window.I18N) I18N.onChange(relocalize);
   session = loadSession();      // restore account (if any) BEFORE loading its data
   state = load();               // synchronous, never blocks on the network
   try { history.replaceState({ v: 'home' }, ''); } catch (e) { histOK = false; }
@@ -3138,6 +3405,7 @@ function init() {
   $('#fab-icon').innerHTML = I.plus;
   $('#fmt-pri-btn').innerHTML = I.flag;
   $('#fmt-due-btn').innerHTML = I.cal;
+  $('#fmt-price-btn').innerHTML = I.tag;
   // Voice is a web/PWA feature. Android's WebView ships no speech-recognition
   // service, so dictation cannot work inside the APK — and the app deliberately
   // does not declare RECORD_AUDIO (see android.yml: it would block Play
@@ -3155,8 +3423,8 @@ function init() {
     + `<button type="button" class="fmt-swatch clear" data-fmt-fill="" aria-label="Remove container colour">${I.x}</button>`;
   // Priority cells (the flag button): Urgent → Low, plus none
   $('#fmt-pris').innerHTML = [4, 3, 2, 1].map(p =>
-    `<button type="button" class="pri-cell" data-fmt-pri="${p}" style="--pc:${PRI[p].color}">${I.flag}<span>${PRI[p].label}</span></button>`).join('')
-    + `<button type="button" class="pri-cell none" data-fmt-pri="">${I.x}<span>None</span></button>`;
+    `<button type="button" class="pri-cell" data-fmt-pri="${p}" style="--pc:${PRI[p].color}">${I.flag}<span>${esc(tr(PRI[p].label))}</span></button>`).join('')
+    + `<button type="button" class="pri-cell none" data-fmt-pri="">${I.x}<span>${esc(tr('None'))}</span></button>`;
   $('#streak-btn').addEventListener('click', () => showStreak());
   $('#streak-back').innerHTML = I.back;
   $('#streak-back').addEventListener('click', () => navBack());
@@ -3217,4 +3485,13 @@ function init() {
   handleShortcutParams();      // pinned app shortcuts: ?new=1 / ?streak=1 / ?joincode=1
   handleJoinLink();            // opened from a shared ?join=CODE link → join + open the list
 }
-try { init(); } catch (err) { showFatal(err); }
+/* Boot once the saved language is loaded, so the first paint is already
+   translated (no flash of English). A failed or missing resource file must
+   never stop the app: I18N.boot() resolves either way, and the `catch` here is
+   a last-ditch guard so a broken i18n.js still yields a working English app. */
+function bootApp() { try { init(); } catch (err) { showFatal(err); } }
+if (window.I18N && typeof window.I18N.boot === 'function') {
+  window.I18N.boot().then(bootApp, bootApp);
+} else {
+  bootApp();
+}
