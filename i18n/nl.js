@@ -257,5 +257,29 @@ I18N.register('nl', {
   'Bike along the river': 'Fietsen langs de rivier',
   'That new ramen place': 'Die nieuwe ramenzaak',
   'Finish the book': 'Het boek uitlezen',
-  'Call mum': 'Mama bellen'
+  'Call mum': 'Mama bellen',
+
+  /* ---- budget & prices ---- */
+  "Price": "Prijs",
+  "Budget": "Budget",
+  "Currency": "Valuta",
+  "Total": "Totaal",
+  "Checked": "Afgevinkt",
+  "Save": "Opslaan",
+  "Set": "Instellen",
+  "Set a budget": "Budget instellen",
+  "Remove budget": "Budget verwijderen",
+  "Remove price": "Prijs verwijderen",
+  "Price set": "Prijs ingesteld",
+  "Price removed": "Prijs verwijderd",
+  "Budget removed": "Budget verwijderd",
+  "Budget saved": "Budget opgeslagen",
+  "of {total}": "van {total}",
+  "{amount} left": "{amount} over",
+  "{amount} over": "{amount} te veel",
+  "Set a spending limit — QuickList adds up the prices for you.": "Stel een uitgavenlimiet in — QuickList telt de prijzen voor je op.",
+  "Every item price × its quantity.": "De prijs van elk item × het aantal.",
+  "What you have already ticked off.": "Wat je al hebt afgevinkt.",
+  "Tip: type the price with the item — “Milk 2.50”.": "Tip: typ de prijs bij het item — “Melk 2,50”.",
+  "Counts towards the list total.": "Telt mee in het lijsttotaal."
 });

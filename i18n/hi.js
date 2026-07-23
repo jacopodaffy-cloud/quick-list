@@ -257,5 +257,29 @@ I18N.register('hi', {
   "Call mum": "माँ को फ़ोन करना",
   "Voice input is unavailable on this device": "इस डिवाइस पर वॉइस इनपुट उपलब्ध नहीं है",
   "Voice input needs an internet connection": "वॉइस इनपुट के लिए इंटरनेट कनेक्शन चाहिए",
-  "Didn’t catch that — tap the mic and try again": "सुनाई नहीं दिया — माइक पर टैप करें और फिर कोशिश करें"
+  "Didn’t catch that — tap the mic and try again": "सुनाई नहीं दिया — माइक पर टैप करें और फिर कोशिश करें",
+
+  /* ---- budget & prices ---- */
+  "Price": "कीमत",
+  "Budget": "बजट",
+  "Currency": "मुद्रा",
+  "Total": "कुल",
+  "Checked": "चेक किया गया",
+  "Save": "सहेजें",
+  "Set": "सेट करें",
+  "Set a budget": "बजट सेट करें",
+  "Remove budget": "बजट हटाएँ",
+  "Remove price": "कीमत हटाएँ",
+  "Price set": "कीमत सेट हुई",
+  "Price removed": "कीमत हटाई गई",
+  "Budget removed": "बजट हटाया गया",
+  "Budget saved": "बजट सहेजा गया",
+  "of {total}": "{total} में से",
+  "{amount} left": "{amount} बचे",
+  "{amount} over": "{amount} ज़्यादा",
+  "Set a spending limit — QuickList adds up the prices for you.": "खर्च की सीमा तय करें — QuickList आपके लिए कीमतें जोड़ देगा।",
+  "Every item price × its quantity.": "हर आइटम की कीमत × उसकी मात्रा।",
+  "What you have already ticked off.": "जो आपने पहले ही चेक कर लिया है।",
+  "Tip: type the price with the item — “Milk 2.50”.": "सुझाव: कीमत आइटम के साथ लिखें — “दूध 2.50”।",
+  "Counts towards the list total.": "सूची के कुल में गिना जाता है।"
 });

@@ -21,7 +21,7 @@
 // Keep in lockstep with versionCode in .github/workflows/android.yml — bump BOTH
 // every release (see PRD "Bump every release"), or installed apps stop noticing
 // new versions.
-const APP_VERSION_CODE = 58;
+const APP_VERSION_CODE = 59;
 
 // The public home of the web app — used for the update wall and for share links
 // (inside the APK location.origin is https://localhost, never usable in a link).
@@ -145,6 +145,7 @@ const I = {
   plus: ic('<path d="M12 5v14M5 12h14"/>'),
   back: ic('<path d="m15 19-7-7 7-7"/>'),
   chev: ic('<path d="m9 18 6-6-6-6"/>'),
+  tag: ic('<path d="M20.6 13.4 12 22l-9-9V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.4" fill="currentColor" stroke="none"/>'),
   dots: ic('<circle cx="5" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.7" fill="currentColor" stroke="none"/>'),
   grip: ic('<circle cx="9" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.4" fill="currentColor" stroke="none"/>'),
   tick: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="tk" d="m5 12.5 5 5L19 6"/></svg>',
@@ -296,6 +297,8 @@ function normList(l) {
     pinned: !!l.pinned,
     tidy: !!l.tidy,
     archived: !!l.archived,
+    budget: normPrice(l.budget),
+    currency: normCcy(l.currency),
     code: (typeof l.code === 'string' && /^[A-Z0-9]{4,10}$/.test(l.code)) ? l.code : null,
     shared: !!(l.shared && typeof l.code === 'string' && /^[A-Z0-9]{4,10}$/.test(l.code)),
     createdAt: Number.isFinite(l.createdAt) ? l.createdAt : Date.now(),
@@ -312,6 +315,7 @@ function normList(l) {
         pri: [1, 2, 3, 4].includes(i.pri) ? i.pri : null,
         due: (Number.isFinite(i.due) && i.due > 0) ? Math.floor(i.due) : null,
         rem: !!(i.rem && i.due),
+        price: normPrice(i.price),
       }))
       .filter(i => i.text.length > 0 || i.img),   // keep image-only items
   };
@@ -359,9 +363,9 @@ function save() {
 }
 
 const isBgHex = s => typeof s === 'string' && /^#[0-9A-Fa-f]{6}$/.test(s);
-const mkItem = (text, done = false, qty = null, img = null, bg = null) => ({ id: uid(), text: cleanText(text, MAX.item), done: !!done, qty: qty && qty > 1 ? Math.min(999, Math.floor(qty)) : null, img: isImgData(img) ? img : null, bg: isBgHex(bg) ? bg : null, pri: null, due: null, rem: false });
+const mkItem = (text, done = false, qty = null, img = null, bg = null) => ({ id: uid(), text: cleanText(text, MAX.item), done: !!done, qty: qty && qty > 1 ? Math.min(999, Math.floor(qty)) : null, img: isImgData(img) ? img : null, bg: isBgHex(bg) ? bg : null, pri: null, due: null, rem: false, price: null });
 function mkList(color) {
-  return { id: uid(), title: '', color: color || nextColor(), items: [], pinned: false, tidy: false, createdAt: Date.now(), updatedAt: Date.now() };
+  return { id: uid(), title: '', color: color || nextColor(), items: [], pinned: false, tidy: false, budget: null, currency: null, createdAt: Date.now(), updatedAt: Date.now() };
 }
 function nextColor() { const c = PALETTE[state.nextColor % PALETTE.length].hex; state.nextColor++; return c; }
 const getList = id => state.lists.find(l => l.id === id);
@@ -1626,7 +1630,7 @@ function showDetail(id, push = true) {
   const d = $('#page-detail'); d.hidden = false;
   d.style.animation = 'none'; void d.offsetWidth; d.style.animation = '';
   edClear(edEl()); pendingBg = null; applyAddbarBg();
-  pendingPri = null; pendingDue = null; pendingRem = false; renderPendChips();
+  pendingPri = null; pendingDue = null; pendingRem = false; pendingPrice = null; renderPendChips();
   syncSend();
   document.body.classList.remove('fmt-on', 'view-home', 'view-streak');
   document.body.classList.add('view-detail');
@@ -1749,9 +1753,55 @@ function dueLabel(ts) {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
     + (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '') + time;
 }
-const itemMetaHTML = it => (it.pri || it.due) ? `<span class="item-meta">
+/* ====================== Budget & prices ======================
+   A list can carry a budget and every item a unit price, so QuickList adds the
+   list up as you shop. Totals are ALWAYS recomputed from the items — nothing is
+   cached — so an edited price, quantity or deletion can never leave a stale sum.
+   Amounts are plain numbers in the list's own currency: no FX, no conversion. */
+const normPrice = v => (Number.isFinite(v) && v > 0) ? Math.min(99999999, Math.round(v * 100) / 100) : null;
+const normCcy = c => (typeof c === 'string' && /^[A-Z]{3}$/.test(c)) ? c : null;
+
+/* A sensible default per shipped language; overridable per list. */
+const CCY_BY_LANG = { en: 'USD', it: 'EUR', es: 'EUR', fr: 'EUR', de: 'EUR', nl: 'EUR', 'pt-BR': 'BRL', pl: 'PLN', ru: 'RUB', tr: 'TRY', 'zh-Hans': 'CNY', ja: 'JPY', ar: 'SAR', hi: 'INR' };
+const CCY_CHOICES = ['EUR', 'USD', 'GBP', 'CHF', 'BRL', 'PLN', 'RUB', 'TRY', 'CNY', 'JPY', 'INR', 'SEK', 'CAD', 'AUD'];
+const defaultCcy = () => CCY_BY_LANG[(window.I18N && I18N.current()) || 'en'] || 'EUR';
+const listCcy = l => (l && l.currency) || defaultCcy();
+const viewCcy = () => listCcy(getList(view.id));
+
+/* Intl handles symbol placement, separators and non-decimal currencies (JPY has
+   no minor unit) correctly per language, so never hand-format money. */
+function money(n, ccy) {
+  const v = Number(n) || 0;
+  try {
+    return new Intl.NumberFormat((window.I18N && I18N.bcp47()) || undefined, { style: 'currency', currency: ccy || defaultCcy() }).format(v);
+  } catch (e) { return (ccy || '') + ' ' + v.toFixed(2); }
+}
+/* A line costs unit price x quantity — the qty pill already means "times N". */
+const itemCost = it => (it.price ? it.price * (it.qty > 1 ? it.qty : 1) : 0);
+const listTotal = l => l.items.reduce((sum, i) => sum + itemCost(i), 0);
+const listChecked = l => l.items.reduce((sum, i) => sum + (i.done ? itemCost(i) : 0), 0);
+/* The budget bar only earns its space once there is something to show. */
+const hasMoney = l => !!(l && (l.budget || l.items.some(i => i.price)));
+
+/* Pull a price out of typed text: "Milk 2.50", "EUR3", "4,20". Deliberately
+   conservative — a bare integer ("Vitamin 3", "Level 5") is NOT a price, so a
+   token needs either a currency symbol or a real decimal. parseQty runs first,
+   so an "x2" token is already gone before this sees the line. */
+const PRICE_RE = /(?:^|\s)(?:([€$£¥₹₺₽])\s?(\d{1,7}(?:[.,]\d{1,2})?)|(\d{1,7}(?:[.,]\d{1,2})?)\s?([€$£¥₹₺₽])|(\d{1,7}[.,]\d{2}))(?=\s|$)/;
+function parsePrice(text) {
+  const t0 = String(text == null ? '' : text);
+  const m = t0.match(PRICE_RE);
+  if (!m) return { text: t0, price: null };
+  const price = normPrice(parseFloat(String(m[2] || m[3] || m[5]).replace(',', '.')));
+  if (!price) return { text: t0, price: null };
+  const rest = (t0.slice(0, m.index) + ' ' + t0.slice(m.index + m[0].length)).replace(/\s{2,}/g, ' ').trim();
+  return { text: rest, price };
+}
+
+const itemMetaHTML = it => (it.pri || it.due || it.price) ? `<span class="item-meta">
     ${it.pri ? `<span class="pri-flag" style="--pc:${PRI[it.pri].color}">${I.flag}${PRI[it.pri].label}</span>` : ''}
     ${it.due ? `<span class="due-chip ${!it.done && it.due < Date.now() ? 'over' : ''}">${I.cal}${esc(dueLabel(it.due))}${it.rem ? I.bell : ''}</span>` : ''}
+    ${it.price ? `<button type="button" class="price-chip" data-price="${it.id}" aria-label="${esc(tr('Price'))}">${I.tag}${esc(money(itemCost(it), viewCcy()))}</button>` : ''}
   </span>` : '';
 
 function ItemRow(it) {
@@ -1858,6 +1908,7 @@ function renderDetail() {
   $('#detail-meta').innerHTML = `<span class="chip-color"></span>${total ? `${done} of ${total} done` : 'Empty list'}${l.pinned ? ' · pinned' : ''}${l.shared ? ' · shared' : ''}`;
   $('#progress').style.display = total ? '' : 'none';
   $('#progress-fill').style.width = (total ? Math.round(done / total * 100) : 0) + '%';
+  renderBudgetBar(l);
 
   const wrap = $('#items');
   if (total) {
@@ -1896,19 +1947,24 @@ function parseQty(text) {
 }
 function smartLine(line) {
   const done = /^\s*(?:[-*•]\s*)?\[\s*[xX]\s*\]/.test(line);
-  const { text, qty } = parseQty(stripMarker(line).trim());
-  return text ? { text, qty, done } : null;
+  const q = parseQty(stripMarker(line).trim());
+  const pr = parsePrice(q.text);          // qty first, so "x2" never reads as money
+  return pr.text ? { text: pr.text, qty: q.qty, done, price: pr.price } : null;
 }
 function addItems(raw) {
   const l = getList(view.id); if (!l) return;
   // split on new lines first (preserves per-line markers), then commas within a line
-  const parts = raw.split(/\r?\n/).flatMap(line => line.split(',')).map(s => s.trim()).filter(Boolean);
+  // Split on newlines, then on commas that SEPARATE items — never on a decimal
+  // comma. Most of the world writes "1,20", and the old plain split(',') tore
+  // that into two items ("Bread 1" and "20"), losing the price entirely.
+  const parts = raw.split(/\r?\n/).flatMap(line => line.split(/,(?!\d{1,2}\b)/)).map(s => s.trim()).filter(Boolean);
   let added = 0;
   for (const p of parts) {
     const it = smartLine(p);
     if (it) {
       const m = mkItem(it.text, it.done, it.qty, null, pendingBg);
       m.pri = pendingPri; m.due = pendingDue; m.rem = !!(pendingDue && pendingRem);
+      m.price = it.price || pendingPrice;   // a typed price wins over the pending chip
       l.items.push(m); added++;
     }
   }
@@ -2397,6 +2453,7 @@ function openDetailMenu(id) {
       <button class="menu-item ${l.tidy ? 'on' : ''}" data-act="tidy" data-id="${id}">${I.sink} Keep checked at bottom <span class="mi-note">${l.tidy ? 'On' : 'Off'}</span></button>
       <button class="menu-item" data-act="color" data-id="${id}">${I.palette} Change colour</button>
       <button class="menu-item ${l.shared ? 'on' : ''}" data-act="share" data-id="${id}">${I.users} ${l.shared ? 'Sharing — show code' : 'Share &amp; collaborate'}${l.shared ? ` <span class="mi-note">${esc(l.code)}</span>` : ''}</button>
+      <button class="menu-item" data-budget-open="${id}">${I.tag} ${esc(tr('Budget'))}${l.budget ? ` <span class="mi-note">${esc(money(l.budget, listCcy(l)))}</span>` : ''}</button>
       <button class="menu-item" data-act="cleardone" data-id="${id}">${I.broom} Clear checked items</button>
       <button class="menu-item" data-act="duplicate" data-id="${id}">${I.duplicate} Duplicate list</button>
       <button class="menu-item" data-act="archive" data-id="${id}">${I.box} Archive list</button>
@@ -2589,7 +2646,7 @@ function toast(msg, actionLabel, fn) {
 
 /* ====================== Event wiring ====================== */
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-open],[data-menu],[data-new],[data-act],[data-color],[data-check],[data-qty],[data-del],[data-sort],[data-filter],[data-clear-filters],[data-toast-action],[data-auth],[data-set-theme],[data-achv-tab],[data-open-archived],[data-open-trash],[data-due-q],[data-due-rem],[data-due-remove],[data-pend-clear],[data-set-lang]');
+  const t = e.target.closest('[data-open],[data-menu],[data-new],[data-act],[data-color],[data-check],[data-qty],[data-del],[data-sort],[data-filter],[data-clear-filters],[data-toast-action],[data-auth],[data-set-theme],[data-achv-tab],[data-open-archived],[data-open-trash],[data-due-q],[data-due-rem],[data-due-remove],[data-pend-clear],[data-set-lang],[data-price],[data-price-remove],[data-budget-remove],[data-budget-open]');
   if (!t) return;
 
   if (t.dataset.setTheme) { setTheme(t.dataset.setTheme); buzz(8); return openSettingsSheet(); }
@@ -2607,7 +2664,17 @@ document.addEventListener('click', e => {
     const k = t.dataset.pendClear;
     if (k === 'pri') pendingPri = null;
     if (k === 'due') { pendingDue = null; pendingRem = false; }
+    if (k === 'price') pendingPrice = null;
     renderPendChips(); buzz(6); return;
+  }
+  if (t.dataset.price) { openPriceSheet(t.dataset.price); return; }
+  if (t.hasAttribute('data-price-remove')) { applyPrice(null); return; }
+  if (t.dataset.budgetOpen) { openBudgetSheet(t.dataset.budgetOpen); return; }
+  if (t.dataset.budgetRemove) {
+    const bl = getList(t.dataset.budgetRemove);
+    if (bl) { bl.budget = null; touch(bl); save(); noAnim = true; renderDetail(); }
+    closeSheet(); buzz(8); toast(tr('Budget removed'));
+    return;
   }
   if (t.dataset.setLang) {
     const code = t.dataset.setLang;
@@ -2875,12 +2942,13 @@ function setContainerBg(hex) {
    Same dual targeting as the container colour: while editing an item they apply
    to THAT item instantly; from the add bar they park as pending chips shown
    above the composer and ride along with the next item added. */
-let pendingPri = null, pendingDue = null, pendingRem = false;
+let pendingPri = null, pendingDue = null, pendingRem = false, pendingPrice = null;
 function renderPendChips() {
   const el = $('#pend-chips'); if (!el) return;
   const chips = [];
   if (pendingPri) chips.push(`<button class="pend-chip" data-pend-clear="pri" style="--pc:${PRI[pendingPri].color}" aria-label="Remove priority">${I.flag}<span>${PRI[pendingPri].label}</span>${I.x}</button>`);
   if (pendingDue) chips.push(`<button class="pend-chip" data-pend-clear="due" aria-label="Remove due date">${I.cal}<span>${esc(dueLabel(pendingDue))}</span>${pendingRem ? I.bell : ''}${I.x}</button>`);
+  if (pendingPrice) chips.push(`<button class="pend-chip" data-pend-clear="price" aria-label="${esc(tr('Remove price'))}">${I.tag}<span>${esc(money(pendingPrice, viewCcy()))}</span>${I.x}</button>`);
   el.innerHTML = chips.join('');
   el.hidden = !chips.length;
 }
@@ -2966,6 +3034,109 @@ function applyDue(ts) {
   buzz(8);
   toast(ts ? 'Due ' + dueLabel(ts) : 'Due date removed');
 }
+
+/* ---- budget bar (detail view) ----
+   Sits under the completion progress and only appears once the list actually
+   involves money. With no budget set it still shows the running total, so
+   pricing items is useful on its own. */
+function renderBudgetBar(l) {
+  const el = $('#budget-bar'); if (!el) return;
+  if (!hasMoney(l)) { el.hidden = true; el.innerHTML = ''; return; }
+  const ccy = listCcy(l), spent = listTotal(l), bud = l.budget || 0;
+  const over = bud > 0 && spent > bud;
+  const pct = bud > 0 ? Math.min(100, Math.round(spent / bud * 100)) : 0;
+  el.hidden = false;
+  el.classList.toggle('over', over);
+  el.dataset.budgetOpen = l.id;
+  el.innerHTML = `
+    <span class="bud-row">
+      <span class="bud-total">${I.tag}${esc(money(spent, ccy))}</span>
+      <span class="bud-of">${bud > 0 ? esc(tr('of {total}', { total: money(bud, ccy) })) : esc(tr('Set a budget'))}</span>
+      ${bud > 0 ? `<span class="bud-left">${esc(over
+        ? tr('{amount} over', { amount: money(spent - bud, ccy) })
+        : tr('{amount} left', { amount: money(bud - spent, ccy) }))}</span>` : ''}
+    </span>
+    ${bud > 0 ? `<span class="bud-track"><i style="width:${pct}%"></i></span>` : ''}`;
+}
+
+/* ---- budget sheet (per list) ---- */
+function openBudgetSheet(id) {
+  const l = getList(id); if (!l) return;
+  const ccy = listCcy(l);
+  const opts = [...new Set([ccy, ...CCY_CHOICES])]
+    .map(c => `<option value="${c}"${c === ccy ? ' selected' : ''}>${c}</option>`).join('');
+  openSheet(`
+    <h2 class="sheet-title">${esc(tr('Budget'))}</h2>
+    <p class="sheet-sub">${esc(tr('Set a spending limit — QuickList adds up the prices for you.'))}</p>
+    <form id="budget-form" class="due-form" data-id="${id}">
+      <input class="field" type="number" id="budget-amount" inputmode="decimal" step="0.01" min="0"
+             placeholder="0.00" value="${l.budget || ''}" aria-label="${esc(tr('Budget'))}">
+      <select class="field field-ccy" id="budget-ccy" aria-label="${esc(tr('Currency'))}">${opts}</select>
+      <button class="btn btn-c" type="submit" style="--c:#5A63E0;--on:#fff">${esc(tr('Save'))}</button>
+    </form>
+    <div class="set-list">
+      <div class="set-row">
+        <div class="set-label"><div class="set-title">${esc(tr('Total'))}</div><div class="set-desc">${esc(tr('Every item price × its quantity.'))}</div></div>
+        <span class="set-value">${esc(money(listTotal(l), ccy))}</span>
+      </div>
+      <div class="set-row">
+        <div class="set-label"><div class="set-title">${esc(tr('Checked'))}</div><div class="set-desc">${esc(tr('What you have already ticked off.'))}</div></div>
+        <span class="set-value">${esc(money(listChecked(l), ccy))}</span>
+      </div>
+    </div>
+    <p class="auth-foot">${I.tag}<span>${esc(tr('Tip: type the price with the item — “Milk 2.50”.'))}</span></p>
+    ${l.budget ? `<button class="btn btn-ghost btn-block" data-budget-remove="${id}" style="margin-top:8px">${I.x}<span>${esc(tr('Remove budget'))}</span></button>` : ''}
+  `);
+}
+function saveBudget(form) {
+  const l = getList(form.dataset.id); if (!l) return closeSheet();
+  const amount = normPrice(parseFloat(String($('#budget-amount').value).replace(',', '.')));
+  const ccy = normCcy(($('#budget-ccy') || {}).value);
+  l.budget = amount; l.currency = ccy || l.currency;
+  touch(l); save(); noAnim = true; renderDetail();
+  closeSheet(); buzz(8);
+  toast(amount ? tr('Budget saved') : tr('Budget removed'));
+}
+
+/* ---- price sheet (per item, or pending for the next one added) ---- */
+let priceTarget = null;
+function openPriceSheet(target) {
+  const l = getList(view.id); if (!l) return;
+  let cur = null;
+  if (target !== 'pending') {
+    const it = l.items.find(i => i.id === target); if (!it) return;
+    cur = it.price;
+  } else cur = pendingPrice;
+  priceTarget = target;
+  openSheet(`
+    <h2 class="sheet-title">${esc(tr('Price'))}</h2>
+    <p class="sheet-sub">${esc(tr('Counts towards the list total.'))}</p>
+    <form id="price-form" class="due-form">
+      <input class="field" type="number" id="price-amount" inputmode="decimal" step="0.01" min="0"
+             placeholder="0.00" value="${cur || ''}" aria-label="${esc(tr('Price'))}">
+      <button class="btn btn-c" type="submit" style="--c:#5A63E0;--on:#fff">${esc(tr('Set'))}</button>
+    </form>
+    ${cur ? `<button class="btn btn-ghost btn-block" data-price-remove style="margin-top:8px">${I.x}<span>${esc(tr('Remove price'))}</span></button>` : ''}
+  `);
+}
+function applyPrice(v) {
+  const price = normPrice(typeof v === 'number' ? v : parseFloat(String(v == null ? '' : v).replace(',', '.')));
+  if (priceTarget === 'pending') { pendingPrice = price; renderPendChips(); }
+  else {
+    const l = getList(view.id); const it = l && l.items.find(i => i.id === priceTarget);
+    if (it) { it.price = price; touch(l); save(); noAnim = true; renderDetail(); }
+  }
+  closeSheet(); buzz(8);
+  toast(price ? tr('Price set') : tr('Price removed'));
+}
+/* Sheet forms are rebuilt on every open, so listen at the document level.
+   Scoped by id so the add bar's own submit is untouched. */
+document.addEventListener('submit', e => {
+  const f = e.target;
+  if (!f || !f.id) return;
+  if (f.id === 'price-form') { e.preventDefault(); applyPrice($('#price-amount').value); }
+  else if (f.id === 'budget-form') { e.preventDefault(); saveBudget(f); }
+});
 
 /* ---- reminders engine ----
    In the installed app, @capacitor/local-notifications schedules REAL OS
@@ -3076,11 +3247,12 @@ document.addEventListener('pointerdown', e => {
   // The due button deliberately does NOT preventDefault: the editor should blur
   // (committing an in-progress edit) before the sheet opens. Grab the target
   // item NOW, while the editor still exists.
-  if (kind === 'due') {
+  if (kind === 'due' || kind === 'price') {
     const a = document.activeElement;
     const row = a && a.classList.contains('item-edit') ? a.closest('.item') : null;
     const target = row ? row.dataset.id : 'pending';
-    setTimeout(() => openDueSheet(target), 120);
+    const open = kind === 'due' ? openDueSheet : openPriceSheet;
+    setTimeout(() => open(target), 120);
     buzz(6);
     return;
   }
@@ -3233,6 +3405,7 @@ function init() {
   $('#fab-icon').innerHTML = I.plus;
   $('#fmt-pri-btn').innerHTML = I.flag;
   $('#fmt-due-btn').innerHTML = I.cal;
+  $('#fmt-price-btn').innerHTML = I.tag;
   // Voice is a web/PWA feature. Android's WebView ships no speech-recognition
   // service, so dictation cannot work inside the APK — and the app deliberately
   // does not declare RECORD_AUDIO (see android.yml: it would block Play

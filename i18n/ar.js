@@ -257,5 +257,29 @@ I18N.register('ar', {
   "Call mum": "الاتصال بأمي",
   "Voice input is unavailable on this device": "الإدخال الصوتي غير متاح على هذا الجهاز",
   "Voice input needs an internet connection": "يحتاج الإدخال الصوتي إلى اتصال بالإنترنت",
-  "Didn’t catch that — tap the mic and try again": "لم ألتقط ذلك — اضغط على الميكروفون وحاول مرة أخرى"
+  "Didn’t catch that — tap the mic and try again": "لم ألتقط ذلك — اضغط على الميكروفون وحاول مرة أخرى",
+
+  /* ---- budget & prices ---- */
+  "Price": "السعر",
+  "Budget": "الميزانية",
+  "Currency": "العملة",
+  "Total": "الإجمالي",
+  "Checked": "المحدَّد",
+  "Save": "حفظ",
+  "Set": "تعيين",
+  "Set a budget": "تعيين ميزانية",
+  "Remove budget": "إزالة الميزانية",
+  "Remove price": "إزالة السعر",
+  "Price set": "تم تعيين السعر",
+  "Price removed": "تمت إزالة السعر",
+  "Budget removed": "تمت إزالة الميزانية",
+  "Budget saved": "تم حفظ الميزانية",
+  "of {total}": "من {total}",
+  "{amount} left": "يتبقى {amount}",
+  "{amount} over": "{amount} زيادة",
+  "Set a spending limit — QuickList adds up the prices for you.": "حدد سقفًا للإنفاق — يجمع QuickList الأسعار نيابة عنك.",
+  "Every item price × its quantity.": "سعر كل عنصر × الكمية.",
+  "What you have already ticked off.": "ما حددته بالفعل.",
+  "Tip: type the price with the item — “Milk 2.50”.": "نصيحة: اكتب السعر مع العنصر — «حليب 2.50».",
+  "Counts towards the list total.": "يُحتسب ضمن إجمالي القائمة."
 });

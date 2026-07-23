@@ -259,5 +259,29 @@ I18N.register('ja', {
   'Bike along the river': '川沿いをサイクリング',
   'That new ramen place': '気になる新しいラーメン屋',
   'Finish the book': '読みかけの本を読み終える',
-  'Call mum': '母に電話'
+  'Call mum': '母に電話',
+
+  /* ---- budget & prices ---- */
+  "Price": "価格",
+  "Budget": "予算",
+  "Currency": "通貨",
+  "Total": "合計",
+  "Checked": "チェック済み",
+  "Save": "保存",
+  "Set": "設定",
+  "Set a budget": "予算を設定",
+  "Remove budget": "予算を削除",
+  "Remove price": "価格を削除",
+  "Price set": "価格を設定しました",
+  "Price removed": "価格を削除しました",
+  "Budget removed": "予算を削除しました",
+  "Budget saved": "予算を保存しました",
+  "of {total}": "{total} 中",
+  "{amount} left": "残り {amount}",
+  "{amount} over": "{amount} 超過",
+  "Set a spending limit — QuickList adds up the prices for you.": "支出の上限を設定 — QuickListが価格を合計します。",
+  "Every item price × its quantity.": "各アイテムの価格 × 数量。",
+  "What you have already ticked off.": "すでにチェックした分。",
+  "Tip: type the price with the item — “Milk 2.50”.": "ヒント: 価格をアイテムと一緒に入力 — 「牛乳 2.50」。",
+  "Counts towards the list total.": "リストの合計に加算されます。"
 });

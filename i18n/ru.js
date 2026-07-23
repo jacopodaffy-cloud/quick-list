@@ -259,5 +259,29 @@ I18N.register('ru', {
   'Bike along the river': 'Прокатиться вдоль реки',
   'That new ramen place': 'Новая рамен-лапшичная',
   'Finish the book': 'Дочитать книгу',
-  'Call mum': 'Позвонить маме'
+  'Call mum': 'Позвонить маме',
+
+  /* ---- budget & prices ---- */
+  "Price": "Цена",
+  "Budget": "Бюджет",
+  "Currency": "Валюта",
+  "Total": "Итого",
+  "Checked": "Отмечено",
+  "Save": "Сохранить",
+  "Set": "Задать",
+  "Set a budget": "Задать бюджет",
+  "Remove budget": "Удалить бюджет",
+  "Remove price": "Удалить цену",
+  "Price set": "Цена задана",
+  "Price removed": "Цена удалена",
+  "Budget removed": "Бюджет удалён",
+  "Budget saved": "Бюджет сохранён",
+  "of {total}": "из {total}",
+  "{amount} left": "осталось {amount}",
+  "{amount} over": "{amount} сверх",
+  "Set a spending limit — QuickList adds up the prices for you.": "Задайте лимит расходов — QuickList сам сложит цены.",
+  "Every item price × its quantity.": "Цена каждого пункта × количество.",
+  "What you have already ticked off.": "То, что вы уже отметили.",
+  "Tip: type the price with the item — “Milk 2.50”.": "Совет: пишите цену вместе с пунктом — «Молоко 2,50».",
+  "Counts towards the list total.": "Учитывается в сумме списка."
 });

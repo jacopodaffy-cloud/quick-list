@@ -1,7 +1,11 @@
 ext {
     minSdkVersion = 22
-    compileSdkVersion = 35
-    targetSdkVersion = 35
+    // Android 16. Play requires a target no more than one year behind the
+    // latest release: from 31 Aug 2026 an app still on API 35 can no longer be
+    // updated. Compiling against 36 needs AGP >= 8.6, which Capacitor 6 does
+    // not scaffold — android.yml bumps AGP and the Gradle wrapper to match.
+    compileSdkVersion = 36
+    targetSdkVersion = 36
     androidxActivityVersion = '1.9.0'
     androidxAppCompatVersion = '1.7.0'
     androidxCoordinatorLayoutVersion = '1.2.0'

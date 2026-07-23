@@ -1162,3 +1162,43 @@ body.view-home #scrollbar {
 /* iOS-style toggle: knob starts on the right and travels the other way */
 [dir="rtl"] .toggle::after { left: auto; right: 3px; }
 [dir="rtl"] .toggle.on::after { transform: translateX(-20px); }
+
+/* ============================================================ budget & prices
+   The budget bar sits under the completion progress in the detail view and
+   only renders when the list actually involves money (see hasMoney). */
+.budget-bar {
+  display: block; width: 100%; text-align: left;
+  background: var(--surface); border-radius: 14px;
+  box-shadow: var(--shadow-1);
+  padding: 10px 13px; margin: 10px 0 2px;
+  font: inherit; color: inherit; cursor: pointer;
+  animation: fade-up .3s var(--ease-out);
+}
+.budget-bar:active { transform: scale(.99); }
+.bud-row { display: flex; align-items: baseline; gap: 8px; }
+.bud-total { display: inline-flex; align-items: center; gap: 5px; font-size: 15.5px; font-weight: 800; letter-spacing: -.01em; }
+.bud-total svg { width: 15px; height: 15px; color: var(--deep); }
+.bud-of { font-size: 13px; font-weight: 600; color: var(--ink-3); }
+.bud-left { margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--deep); }
+[dir="rtl"] .bud-left { margin-left: 0; margin-right: auto; }
+.bud-track { display: block; height: 6px; border-radius: 99px; background: var(--line-2); margin-top: 8px; overflow: hidden; }
+.bud-track i { display: block; height: 100%; border-radius: 99px; background: var(--c); transition: width .35s var(--ease-out); }
+/* Over budget: the whole bar goes red, not just the fill, so it reads at a glance. */
+.budget-bar.over .bud-track i { background: #F2555A; }
+.budget-bar.over .bud-left { color: #F2555A; }
+.budget-bar.over .bud-total svg { color: #F2555A; }
+
+/* per-item price chip, alongside the priority/due chips */
+.price-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11.5px; font-weight: 700;
+  padding: 2px 8px 2px 6px; border-radius: 999px;
+  background: color-mix(in srgb, var(--c) 14%, var(--surface));
+  color: var(--deep); border: 0; font-family: inherit; cursor: pointer;
+}
+.price-chip svg { width: 11px; height: 11px; }
+.price-chip:active { transform: scale(.92); }
+.item.done .price-chip { opacity: .5; }
+
+/* currency select inside the budget form */
+.field-ccy { flex: 0 0 92px; max-width: 92px; }

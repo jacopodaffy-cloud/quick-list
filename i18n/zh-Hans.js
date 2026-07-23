@@ -257,5 +257,29 @@ I18N.register('zh-Hans', {
   "Call mum": "给妈妈打电话",
   "Voice input is unavailable on this device": "此设备不支持语音输入",
   "Voice input needs an internet connection": "语音输入需要网络连接",
-  "Didn’t catch that — tap the mic and try again": "没听清 — 点击麦克风再试一次"
+  "Didn’t catch that — tap the mic and try again": "没听清 — 点击麦克风再试一次",
+
+  /* ---- budget & prices ---- */
+  "Price": "价格",
+  "Budget": "预算",
+  "Currency": "货币",
+  "Total": "合计",
+  "Checked": "已勾选",
+  "Save": "保存",
+  "Set": "设置",
+  "Set a budget": "设置预算",
+  "Remove budget": "移除预算",
+  "Remove price": "移除价格",
+  "Price set": "价格已设置",
+  "Price removed": "价格已移除",
+  "Budget removed": "预算已移除",
+  "Budget saved": "预算已保存",
+  "of {total}": "共 {total}",
+  "{amount} left": "剩余 {amount}",
+  "{amount} over": "超出 {amount}",
+  "Set a spending limit — QuickList adds up the prices for you.": "设置支出上限 — QuickList 会帮你合计价格。",
+  "Every item price × its quantity.": "每项价格 × 数量。",
+  "What you have already ticked off.": "你已经勾选的部分。",
+  "Tip: type the price with the item — “Milk 2.50”.": "提示：把价格和事项一起输入 — “牛奶 2.50”。",
+  "Counts towards the list total.": "计入清单合计。"
 });

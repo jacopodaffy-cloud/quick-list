@@ -259,5 +259,29 @@ I18N.register('tr', {
   'Bike along the river': 'Nehir kenarında bisiklet',
   'That new ramen place': 'Yeni açılan ramen yeri',
   'Finish the book': 'Kitabı bitir',
-  'Call mum': 'Annemi ara'
+  'Call mum': 'Annemi ara',
+
+  /* ---- budget & prices ---- */
+  "Price": "Fiyat",
+  "Budget": "Bütçe",
+  "Currency": "Para birimi",
+  "Total": "Toplam",
+  "Checked": "İşaretlenen",
+  "Save": "Kaydet",
+  "Set": "Ayarla",
+  "Set a budget": "Bütçe belirle",
+  "Remove budget": "Bütçeyi kaldır",
+  "Remove price": "Fiyatı kaldır",
+  "Price set": "Fiyat ayarlandı",
+  "Price removed": "Fiyat kaldırıldı",
+  "Budget removed": "Bütçe kaldırıldı",
+  "Budget saved": "Bütçe kaydedildi",
+  "of {total}": "/ {total}",
+  "{amount} left": "{amount} kaldı",
+  "{amount} over": "{amount} fazla",
+  "Set a spending limit — QuickList adds up the prices for you.": "Bir harcama limiti belirle — QuickList fiyatları senin için toplar.",
+  "Every item price × its quantity.": "Her öğenin fiyatı × adedi.",
+  "What you have already ticked off.": "Zaten işaretlediklerin.",
+  "Tip: type the price with the item — “Milk 2.50”.": "İpucu: fiyatı öğeyle birlikte yaz — “Süt 2,50”.",
+  "Counts towards the list total.": "Liste toplamına dahil edilir."
 });

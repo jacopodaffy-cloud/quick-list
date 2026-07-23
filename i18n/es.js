@@ -259,5 +259,29 @@ I18N.register('es', {
   "Bike along the river": "Pasear en bici por el río",
   "That new ramen place": "El nuevo sitio de ramen",
   "Finish the book": "Terminar el libro",
-  "Call mum": "Llamar a mamá"
+  "Call mum": "Llamar a mamá",
+
+  /* ---- budget & prices ---- */
+  "Price": "Precio",
+  "Budget": "Presupuesto",
+  "Currency": "Moneda",
+  "Total": "Total",
+  "Checked": "Marcado",
+  "Save": "Guardar",
+  "Set": "Aplicar",
+  "Set a budget": "Fijar un presupuesto",
+  "Remove budget": "Quitar presupuesto",
+  "Remove price": "Quitar precio",
+  "Price set": "Precio fijado",
+  "Price removed": "Precio eliminado",
+  "Budget removed": "Presupuesto eliminado",
+  "Budget saved": "Presupuesto guardado",
+  "of {total}": "de {total}",
+  "{amount} left": "quedan {amount}",
+  "{amount} over": "{amount} de más",
+  "Set a spending limit — QuickList adds up the prices for you.": "Fija un límite de gasto — QuickList suma los precios por ti.",
+  "Every item price × its quantity.": "El precio de cada elemento × su cantidad.",
+  "What you have already ticked off.": "Lo que ya has marcado.",
+  "Tip: type the price with the item — “Milk 2.50”.": "Consejo: escribe el precio junto al elemento — “Leche 2,50”.",
+  "Counts towards the list total.": "Cuenta para el total de la lista."
 });
