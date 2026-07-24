@@ -21,7 +21,7 @@
 // Keep in lockstep with versionCode in .github/workflows/android.yml — bump BOTH
 // every release (see PRD "Bump every release"), or installed apps stop noticing
 // new versions.
-const APP_VERSION_CODE = 59;
+const APP_VERSION_CODE = 60;
 
 // The public home of the web app — used for the update wall and for share links
 // (inside the APK location.origin is https://localhost, never usable in a link).
@@ -203,7 +203,7 @@ const GOOGLE_G = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="t
    whether you appear on the global ranking. Theme is also bootstrapped
    in theme.js before first paint so there's no flash. */
 const SETTINGS_KEY = 'quicklist.settings';
-const DEFAULT_SETTINGS = { theme: 'system', haptics: true, leaderboard: true, lang: '' };
+const DEFAULT_SETTINGS = { theme: 'system', haptics: true, leaderboard: true, lang: '', seenTour: false };
 let settings = loadSettings();
 function loadSettings() {
   let s = {};
@@ -216,6 +216,7 @@ function loadSettings() {
   // rewrites the whole record, so omitting it here would wipe the user's
   // language every time any other setting changed.
   out.lang = typeof out.lang === 'string' ? out.lang : '';
+  out.seenTour = !!out.seenTour;
   return out;
 }
 function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { } }
@@ -2646,7 +2647,7 @@ function toast(msg, actionLabel, fn) {
 
 /* ====================== Event wiring ====================== */
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-open],[data-menu],[data-new],[data-act],[data-color],[data-check],[data-qty],[data-del],[data-sort],[data-filter],[data-clear-filters],[data-toast-action],[data-auth],[data-set-theme],[data-achv-tab],[data-open-archived],[data-open-trash],[data-due-q],[data-due-rem],[data-due-remove],[data-pend-clear],[data-set-lang],[data-price],[data-price-remove],[data-budget-remove],[data-budget-open]');
+  const t = e.target.closest('[data-open],[data-menu],[data-new],[data-act],[data-color],[data-check],[data-qty],[data-del],[data-sort],[data-filter],[data-clear-filters],[data-toast-action],[data-auth],[data-set-theme],[data-achv-tab],[data-open-archived],[data-open-trash],[data-due-q],[data-due-rem],[data-due-remove],[data-pend-clear],[data-set-lang],[data-price],[data-price-remove],[data-budget-remove],[data-budget-open],[data-tour]');
   if (!t) return;
 
   if (t.dataset.setTheme) { setTheme(t.dataset.setTheme); buzz(8); return openSettingsSheet(); }
@@ -2667,6 +2668,7 @@ document.addEventListener('click', e => {
     if (k === 'price') pendingPrice = null;
     renderPendChips(); buzz(6); return;
   }
+  if (t.dataset.tour) { tourAction(t.dataset.tour); return; }
   if (t.dataset.price) { openPriceSheet(t.dataset.price); return; }
   if (t.hasAttribute('data-price-remove')) { applyPrice(null); return; }
   if (t.dataset.budgetOpen) { openBudgetSheet(t.dataset.budgetOpen); return; }
@@ -3035,6 +3037,47 @@ function applyDue(ts) {
   toast(ts ? 'Due ' + dueLabel(ts) : 'Due date removed');
 }
 
+/* ====================== First-run tutorial ======================
+   Four cards shown ONCE, the first time the app is opened on this device.
+
+   "Never again" is guaranteed by marking it seen the moment it is SHOWN, not
+   when it is finished — otherwise swiping the sheet away or pressing back
+   would bring it back on the next launch. The flag lives in the device-local
+   settings (never synced), so it is per-device by design. */
+const TOUR_STEPS = () => [
+  { icon: I.palette, title: tr('Every list is a colour'),
+    body: tr('Tap “New list” and pick a colour. No folders, no categories — the colour is how you spot it.') },
+  { icon: I.mic, title: tr('Add things fast'),
+    body: tr('Type it, paste a whole list at once, or tap the mic and say it. “Milk x2” sets the quantity, “Milk 2.50” sets the price.') },
+  { icon: I.flag, title: tr('Organise as you go'),
+    body: tr('Check things off, hold the grip to reorder, and add a priority, a due date or a reminder from the toolbar.') },
+  { icon: I.tag, title: tr('Budgets and sharing'),
+    body: tr('Prices add up against a budget while you shop. Share a list on WhatsApp, or let someone join it with a code.') },
+];
+let tourStep = 0;
+function openTour() {
+  tourStep = 0;
+  settings.seenTour = true; saveSettings();   // mark seen up front — see note above
+  renderTour();
+}
+function renderTour() {
+  const steps = TOUR_STEPS(), s = steps[tourStep], last = tourStep === steps.length - 1;
+  openSheet(`
+    <div class="tour">
+      <span class="tour-ic">${s.icon}</span>
+      <h2 class="sheet-title">${esc(s.title)}</h2>
+      <p class="tour-body">${esc(s.body)}</p>
+      <div class="tour-dots">${steps.map((_, i) => `<i class="${i === tourStep ? 'on' : ''}"></i>`).join('')}</div>
+      <button class="btn btn-c btn-block" data-tour="next">${esc(last ? tr('Start using QuickList') : tr('Next'))}</button>
+      ${last ? '' : `<button class="btn btn-ghost btn-block" data-tour="skip" style="margin-top:8px">${esc(tr('Skip'))}</button>`}
+    </div>`);
+}
+function tourAction(kind) {
+  const steps = TOUR_STEPS();
+  if (kind === 'skip' || tourStep >= steps.length - 1) { closeSheet(); buzz(8); return; }
+  tourStep++; renderTour(); buzz(6);
+}
+
 /* ---- budget bar (detail view) ----
    Sits under the completion progress and only appears once the list actually
    involves money. With no budget set it still shows the running total, so
@@ -3384,6 +3427,10 @@ function init() {
   applyStaticI18n();            // translate the shell BEFORE the first render
   if (window.I18N) I18N.onChange(relocalize);
   session = loadSession();      // restore account (if any) BEFORE loading its data
+  // Is this a brand-new install? Checked BEFORE load(), which seeds the demo
+  // lists in memory and would otherwise make every user look "new".
+  let freshInstall = false;
+  try { freshInstall = !localStorage.getItem(activeKey()); } catch (e) { }
   state = load();               // synchronous, never blocks on the network
   try { history.replaceState({ v: 'home' }, ''); } catch (e) { histOK = false; }
   $('#page-detail').hidden = true; $('#page-home').hidden = false; $('#backdrop').hidden = true;
@@ -3484,6 +3531,17 @@ function init() {
   checkForceUpdate();
   handleShortcutParams();      // pinned app shortcuts: ?new=1 / ?streak=1 / ?joincode=1
   handleJoinLink();            // opened from a shared ?join=CODE link → join + open the list
+
+  // First run → show the tutorial once. An EXISTING install is silently marked
+  // as seen instead: someone already using QuickList should not be walked
+  // through it on an update. Someone arriving on a ?join= link is heading
+  // straight for a shared list, so the tour would only be in the way there.
+  if (!settings.seenTour) {
+    let joining = false;
+    try { joining = !!new URLSearchParams(location.search).get('join'); } catch (e) { }
+    if (freshInstall && !joining) setTimeout(openTour, 450);   // let home paint first
+    else { settings.seenTour = true; saveSettings(); }
+  }
 }
 /* Boot once the saved language is loaded, so the first paint is already
    translated (no flash of English). A failed or missing resource file must

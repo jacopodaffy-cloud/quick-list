@@ -9,12 +9,11 @@ one master keeps the launcher icon identical to the PWA / web icon.
 - ic_launcher.png            legacy icon, corners rounded (transparent outside)
 - ic_launcher_round.png      round-mask variant (full bleed; OS circles it)
 - ic_launcher_foreground.png adaptive foreground (full bleed; OS masks it)
-- ic_launcher_background.xml solid brand blue, so no white shows behind the mask
+- ic_launcher_background.xml the tile's white, so nothing shows behind the mask
 """
 from PIL import Image, ImageDraw
 import os
 
-BLUE = (0x2F, 0x6B, 0xF6, 255)
 SRC = os.path.join(os.path.dirname(__file__), '..', 'icon-512.png')
 master = Image.open(SRC).convert('RGBA')
 
@@ -49,14 +48,14 @@ for folder, icon_px, fg_px in configs:
     resized(icon_px).save(f'{path}/ic_launcher_round.png')  # round variant
     resized(fg_px).save(f'{path}/ic_launcher_foreground.png')  # adaptive foreground
 
-# Adaptive background: solid brand blue (matches the mark's field) so the masked
-# icon never shows a white or transparent gap behind the foreground.
+# Adaptive background: the same white as the icon tile, so the masked icon never
+# shows a coloured or transparent gap behind the foreground.
 drawable = 'android/app/src/main/res/drawable'
 os.makedirs(drawable, exist_ok=True)
 with open(f'{drawable}/ic_launcher_background.xml', 'w') as f:
     f.write('<?xml version="1.0" encoding="utf-8"?>\n'
             '<shape xmlns:android="http://schemas.android.com/apk/res/android">\n'
-            '    <solid android:color="#2F6BF6"/>\n'
+            '    <solid android:color="#FFFFFF"/>\n'
             '</shape>\n')
 
-print('Icons written from icon-512.png — brand blue background, rounded legacy icon')
+print('Icons written from icon-512.png — white tile background, rounded legacy icon')

@@ -281,5 +281,18 @@ I18N.register('nl', {
   "Every item price × its quantity.": "De prijs van elk item × het aantal.",
   "What you have already ticked off.": "Wat je al hebt afgevinkt.",
   "Tip: type the price with the item — “Milk 2.50”.": "Tip: typ de prijs bij het item — “Melk 2,50”.",
-  "Counts towards the list total.": "Telt mee in het lijsttotaal."
+  "Counts towards the list total.": "Telt mee in het lijsttotaal.",
+
+  /* ---- first-run tutorial ---- */
+  "Every list is a colour": "Elke lijst is een kleur",
+  "Tap “New list” and pick a colour. No folders, no categories — the colour is how you spot it.": "Tik op “Nieuwe lijst” en kies een kleur. Geen mappen, geen categorieën — aan de kleur herken je hem.",
+  "Add things fast": "Snel toevoegen",
+  "Type it, paste a whole list at once, or tap the mic and say it. “Milk x2” sets the quantity, “Milk 2.50” sets the price.": "Typ het, plak een hele lijst in één keer, of tik op de microfoon en zeg het. “Melk x2” zet het aantal, “Melk 2,50” de prijs.",
+  "Organise as you go": "Ordenen terwijl je gaat",
+  "Check things off, hold the grip to reorder, and add a priority, a due date or a reminder from the toolbar.": "Vink af, houd de greep vast om te herschikken en voeg prioriteit, deadline of herinnering toe via de balk.",
+  "Budgets and sharing": "Budgetten en delen",
+  "Prices add up against a budget while you shop. Share a list on WhatsApp, or let someone join it with a code.": "Prijzen tellen op tegen je budget tijdens het winkelen. Deel een lijst via WhatsApp of laat iemand meedoen met een code.",
+  "Next": "Volgende",
+  "Skip": "Overslaan",
+  "Start using QuickList": "QuickList gaan gebruiken"
 });

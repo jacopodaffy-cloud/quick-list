@@ -283,5 +283,18 @@ I18N.register('ru', {
   "Every item price × its quantity.": "Цена каждого пункта × количество.",
   "What you have already ticked off.": "То, что вы уже отметили.",
   "Tip: type the price with the item — “Milk 2.50”.": "Совет: пишите цену вместе с пунктом — «Молоко 2,50».",
-  "Counts towards the list total.": "Учитывается в сумме списка."
+  "Counts towards the list total.": "Учитывается в сумме списка.",
+
+  /* ---- first-run tutorial ---- */
+  "Every list is a colour": "Каждый список — это цвет",
+  "Tap “New list” and pick a colour. No folders, no categories — the colour is how you spot it.": "Нажмите «Новый список» и выберите цвет. Без папок и категорий — цвет и есть опознавательный знак.",
+  "Add things fast": "Добавляйте быстро",
+  "Type it, paste a whole list at once, or tap the mic and say it. “Milk x2” sets the quantity, “Milk 2.50” sets the price.": "Наберите, вставьте сразу весь список или нажмите микрофон и продиктуйте. «Молоко x2» задаёт количество, «Молоко 2,50» — цену.",
+  "Organise as you go": "Порядок по ходу дела",
+  "Check things off, hold the grip to reorder, and add a priority, a due date or a reminder from the toolbar.": "Отмечайте пункты, удерживайте ручку для перестановки и добавляйте приоритет, срок или напоминание с панели.",
+  "Budgets and sharing": "Бюджеты и общий доступ",
+  "Prices add up against a budget while you shop. Share a list on WhatsApp, or let someone join it with a code.": "Цены складываются в бюджет прямо во время покупок. Поделитесь списком в WhatsApp или дайте войти по коду.",
+  "Next": "Далее",
+  "Skip": "Пропустить",
+  "Start using QuickList": "Начать пользоваться QuickList"
 });

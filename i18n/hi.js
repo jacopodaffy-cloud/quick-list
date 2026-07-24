@@ -281,5 +281,18 @@ I18N.register('hi', {
   "Every item price × its quantity.": "हर आइटम की कीमत × उसकी मात्रा।",
   "What you have already ticked off.": "जो आपने पहले ही चेक कर लिया है।",
   "Tip: type the price with the item — “Milk 2.50”.": "सुझाव: कीमत आइटम के साथ लिखें — “दूध 2.50”।",
-  "Counts towards the list total.": "सूची के कुल में गिना जाता है।"
+  "Counts towards the list total.": "सूची के कुल में गिना जाता है।",
+
+  /* ---- first-run tutorial ---- */
+  "Every list is a colour": "हर सूची एक रंग है",
+  "Tap “New list” and pick a colour. No folders, no categories — the colour is how you spot it.": "“नई सूची” पर टैप करें और एक रंग चुनें। न फ़ोल्डर, न श्रेणियाँ — रंग से ही पहचान होती है।",
+  "Add things fast": "तेज़ी से जोड़ें",
+  "Type it, paste a whole list at once, or tap the mic and say it. “Milk x2” sets the quantity, “Milk 2.50” sets the price.": "टाइप करें, पूरी सूची एक साथ पेस्ट करें, या माइक पर टैप करके बोलें। “दूध x2” मात्रा तय करता है, “दूध 2.50” कीमत।",
+  "Organise as you go": "चलते-चलते व्यवस्थित करें",
+  "Check things off, hold the grip to reorder, and add a priority, a due date or a reminder from the toolbar.": "आइटम चेक करें, क्रम बदलने के लिए ग्रिप दबाए रखें, और टूलबार से प्राथमिकता, तारीख या रिमाइंडर जोड़ें।",
+  "Budgets and sharing": "बजट और साझा करना",
+  "Prices add up against a budget while you shop. Share a list on WhatsApp, or let someone join it with a code.": "खरीदारी के दौरान कीमतें बजट में जुड़ती जाती हैं। सूची WhatsApp पर साझा करें या कोड से किसी को जोड़ें।",
+  "Next": "आगे",
+  "Skip": "छोड़ें",
+  "Start using QuickList": "QuickList इस्तेमाल शुरू करें"
 });

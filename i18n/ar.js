@@ -281,5 +281,18 @@ I18N.register('ar', {
   "Every item price × its quantity.": "سعر كل عنصر × الكمية.",
   "What you have already ticked off.": "ما حددته بالفعل.",
   "Tip: type the price with the item — “Milk 2.50”.": "نصيحة: اكتب السعر مع العنصر — «حليب 2.50».",
-  "Counts towards the list total.": "يُحتسب ضمن إجمالي القائمة."
+  "Counts towards the list total.": "يُحتسب ضمن إجمالي القائمة.",
+
+  /* ---- first-run tutorial ---- */
+  "Every list is a colour": "كل قائمة لها لون",
+  "Tap “New list” and pick a colour. No folders, no categories — the colour is how you spot it.": "اضغط «قائمة جديدة» واختر لونًا. لا مجلدات ولا فئات — اللون هو ما يميّزها.",
+  "Add things fast": "أضف بسرعة",
+  "Type it, paste a whole list at once, or tap the mic and say it. “Milk x2” sets the quantity, “Milk 2.50” sets the price.": "اكتبها، أو الصق قائمة كاملة دفعة واحدة، أو اضغط الميكروفون وانطقها. «حليب x2» يحدد الكمية، و«حليب 2.50» يحدد السعر.",
+  "Organise as you go": "رتّب أثناء العمل",
+  "Check things off, hold the grip to reorder, and add a priority, a due date or a reminder from the toolbar.": "حدّد العناصر، واضغط مطولًا على المقبض لإعادة الترتيب، وأضف أولوية أو موعدًا أو تذكيرًا من الشريط.",
+  "Budgets and sharing": "الميزانيات والمشاركة",
+  "Prices add up against a budget while you shop. Share a list on WhatsApp, or let someone join it with a code.": "تُجمع الأسعار ضمن ميزانيتك أثناء التسوق. شارك القائمة على WhatsApp أو دع غيرك ينضم برمز.",
+  "Next": "التالي",
+  "Skip": "تخطٍ",
+  "Start using QuickList": "ابدأ استخدام QuickList"
 });

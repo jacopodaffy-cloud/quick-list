@@ -281,5 +281,18 @@ I18N.register('zh-Hans', {
   "Every item price × its quantity.": "每项价格 × 数量。",
   "What you have already ticked off.": "你已经勾选的部分。",
   "Tip: type the price with the item — “Milk 2.50”.": "提示：把价格和事项一起输入 — “牛奶 2.50”。",
-  "Counts towards the list total.": "计入清单合计。"
+  "Counts towards the list total.": "计入清单合计。",
+
+  /* ---- first-run tutorial ---- */
+  "Every list is a colour": "每个清单都是一种颜色",
+  "Tap “New list” and pick a colour. No folders, no categories — the colour is how you spot it.": "点击“新建清单”并选一种颜色。没有文件夹，没有分类——靠颜色就能认出它。",
+  "Add things fast": "快速添加",
+  "Type it, paste a whole list at once, or tap the mic and say it. “Milk x2” sets the quantity, “Milk 2.50” sets the price.": "输入、一次粘贴整份清单，或点麦克风说出来。“牛奶 x2”设定数量，“牛奶 2.50”设定价格。",
+  "Organise as you go": "边用边整理",
+  "Check things off, hold the grip to reorder, and add a priority, a due date or a reminder from the toolbar.": "勾选事项，长按握把可重新排序，还能从工具栏添加优先级、截止日期或提醒。",
+  "Budgets and sharing": "预算与共享",
+  "Prices add up against a budget while you shop. Share a list on WhatsApp, or let someone join it with a code.": "购物时价格会自动计入预算。把清单分享到 WhatsApp，或让别人用邀请码加入。",
+  "Next": "下一步",
+  "Skip": "跳过",
+  "Start using QuickList": "开始使用 QuickList"
 });

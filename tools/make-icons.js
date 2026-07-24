@@ -1,11 +1,15 @@
-/* Generates icon-192.png and icon-512.png (the QuickList list mark) with a
+/* Generates icon-192.png and icon-512.png (the QuickList "Q" mark) with a
    hand-rolled PNG encoder — no native deps, so it runs on plain Node.
    Run from the quicklist folder:  node tools/make-icons.js
 
-   The artwork is kept in the SAME 1024-unit coordinate space as icon.svg /
-   icon-maskable.svg, so the raster PNGs and the vector icons stay identical.
-   These PNGs are full-bleed (blue to every edge) to serve as maskable icons and
-   as the source that tools/gen_icons.py resizes into the Android launcher. */
+   The artwork uses the SAME coordinates as icon.svg / icon-maskable.svg (a
+   1024-unit space, authored around the artwork centre 514.5,589.75), so the
+   raster PNGs and the vector icons stay identical. Shapes are rendered from
+   signed-distance functions, which gives clean anti-aliasing at every size.
+
+   These PNGs are full-bleed and use the MASKABLE scale (0.8), matching
+   icon-maskable.svg: they are tagged maskable in the manifest and are the
+   source that tools/gen_icons.py resizes into the Android launcher icons. */
 const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
@@ -41,43 +45,95 @@ function png(size, draw) {
 }
 
 /* ---- palette (matches icon.svg) ---- */
-const BLUE = [0x2F, 0x6B, 0xF6], GREEN = [0x17, 0xB9, 0x81], ORANGE = [0xF8, 0xA8, 0x1B], WHITE = [255, 255, 255];
+const RED = [0xF4, 0x51, 0x5E], ORANGE = [0xFC, 0xA0, 0x19], BLUE = [0x1E, 0x6F, 0xF5], PURPLE = [0x7A, 0x4C, 0xF0];
+const TILE_TOP = [0xFF, 0xFF, 0xFF], TILE_BOT = [0xF1, 0xF4, 0xF8];
 // mix(a, b, t) = a·t + b·(1−t)  → returns `a` at t=1, `b` at t=0
 const mix = (a, b, t) => [Math.round(a[0] * t + b[0] * (1 - t)), Math.round(a[1] * t + b[1] * (1 - t)), Math.round(a[2] * t + b[2] * (1 - t))];
+const lerp = (a, b, t) => mix(b, a, t);   // plain a→b interpolation
 
-/* Signed distance to a rounded rectangle (negative = inside). */
+/* ---- geometry, in artwork space (identical to the SVG) ---- */
+const ART_CX = 514.5, ART_CY = 589.75;     // artwork centre
+const SCALE = 0.8;                          // maskable scale, as icon-maskable.svg
+const RING = { cx: 546, cy: 534, r: 265.5, hw: 53.5, a0: 215, sweep: 292 };
+const TAIL = { ax: 594, ay: 713, bx: 786, by: 905, hw: 59.5 };
+const ROWS = [
+  { cy: 416, col: RED }, { cy: 524, col: ORANGE }, { cy: 634, col: BLUE },
+];
+const BULLET = { cx: 198, r: 34 };
+const BAR = { x: 277, w: 277, h: 54, rx: 27 };
+/* The Q's colour sweeps around the arc, which a single linear gradient cannot
+   do (it would go muddy where red and blue meet on the right). Both the SVG and
+   this renderer therefore use TWO linear gradients over the same arc, split at
+   ~42.5° and overlapping, so the join lands on orange in both and is invisible.
+   Keep these in step with the <linearGradient> pairs in icon.svg. */
+const GRAD_A = { ax: 328.5, ay: 381.7, bx: 733.7, by: 721.7, from: RED, to: ORANGE };
+const GRAD_B = { ax: 749.4, ay: 704.7, bx: 480, by: 790, from: ORANGE, to: BLUE };
+const SPLIT = 187.5;   // degrees along the sweep where segment B takes over
+
+/* Signed distances (negative = inside). */
 function sdRoundRect(px, py, x, y, w, h, r) {
   const hx = w / 2, hy = h / 2, cx = x + hx, cy = y + hy;
   const qx = Math.abs(px - cx) - (hx - r), qy = Math.abs(py - cy) - (hy - r);
-  const outside = Math.hypot(Math.max(qx, 0), Math.max(qy, 0));
-  const inside = Math.min(Math.max(qx, qy), 0);
-  return outside + inside - r;
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
 }
 const sdCircle = (px, py, cx, cy, r) => Math.hypot(px - cx, py - cy) - r;
-
-// White silhouette: three list-tabs stepping off the left edge + the card body.
-const WHITE_RECTS = [
-  [252, 340, 220, 96, 48], [268, 464, 204, 96, 48], [288, 588, 184, 96, 48],
-  [410, 268, 390, 520, 74],
-];
-// Coloured rows: [cx, cy, r, colour] bullets and [x, y, w, h, r, colour] bars.
-const DOTS = [[498, 388, 30, BLUE], [498, 512, 30, GREEN], [498, 636, 30, ORANGE]];
-const BARS = [
-  [560, 371, 160, 34, 17, BLUE], [560, 495, 188, 34, 17, GREEN], [560, 619, 152, 34, 17, ORANGE],
-];
+/* Capsule: the tail, and the round caps of the arc. */
+function sdSegment(px, py, ax, ay, bx, by, hw) {
+  const vx = bx - ax, vy = by - ay, wx = px - ax, wy = py - ay;
+  const t = Math.max(0, Math.min(1, (wx * vx + wy * vy) / (vx * vx + vy * vy)));
+  return Math.hypot(px - (ax + vx * t), py - (ay + vy * t)) - hw;
+}
+/* Arc with round caps: inside the angular sweep it is the distance to the
+   circle band; outside it, the distance to whichever end cap is nearer. */
+function sdArc(px, py, a) {
+  const dx = px - a.cx, dy = py - a.cy;
+  let ang = Math.atan2(dy, dx) * 180 / Math.PI; if (ang < 0) ang += 360;
+  let rel = (ang - a.a0) % 360; if (rel < 0) rel += 360;
+  if (rel <= a.sweep) return Math.abs(Math.hypot(dx, dy) - a.r) - a.hw;
+  const rad = d => d * Math.PI / 180;
+  const p0x = a.cx + a.r * Math.cos(rad(a.a0)), p0y = a.cy + a.r * Math.sin(rad(a.a0));
+  const p1x = a.cx + a.r * Math.cos(rad(a.a0 + a.sweep)), p1y = a.cy + a.r * Math.sin(rad(a.a0 + a.sweep));
+  return Math.min(Math.hypot(px - p0x, py - p0y), Math.hypot(px - p1x, py - p1y)) - a.hw;
+}
+/* Project a point onto a gradient axis and read off its colour. */
+function gradAt(px, py, g) {
+  const vx = g.bx - g.ax, vy = g.by - g.ay;
+  let t = ((px - g.ax) * vx + (py - g.ay) * vy) / (vx * vx + vy * vy);
+  return lerp(g.from, g.to, Math.max(0, Math.min(1, t)));
+}
+/* Which of the two gradients applies depends on how far round the sweep the
+   point sits — that is what makes the result read as a conic sweep. */
+function ringColour(px, py) {
+  let ang = Math.atan2(py - RING.cy, px - RING.cx) * 180 / Math.PI; if (ang < 0) ang += 360;
+  let rel = (ang - RING.a0) % 360; if (rel < 0) rel += 360;
+  // Round caps bulge PAST the sweep, so a cap pixel can land in the gap and
+  // read as rel≈359 — which would flip the start cap to the blue segment.
+  // Snap anything outside the sweep to whichever end it actually belongs to.
+  if (rel > RING.sweep) rel = (rel - RING.sweep) < (360 - rel) ? RING.sweep : 0;
+  return gradAt(px, py, rel <= SPLIT ? GRAD_A : GRAD_B);
+}
 
 function icon(size) {
-  const s = size / 1024;                 // device px per design unit
-  const aa = 0.6 / s;                    // ~1.2px feather, expressed in design units
-  const cover = d => Math.min(1, Math.max(0, 0.5 - d / (2 * aa)));  // 1 inside → 0 outside
+  const s = size / 1024;                       // device px per design unit
+  const aaDesign = 0.6 / s;                    // ~1.2px feather, in design units
+  const aa = aaDesign / SCALE;                 // …expressed in artwork units
+  const cover = d => Math.min(1, Math.max(0, 0.5 - d / (2 * aa)));
   return png(size, (x, y) => {
-    const px = (x + 0.5) / s, py = (y + 0.5) / s;
-    let col = BLUE;                       // full-bleed background
-    let cw = 0;                           // union coverage of the white shapes
-    for (const [rx, ry, rw, rh, rr] of WHITE_RECTS) { cw = Math.max(cw, cover(sdRoundRect(px, py, rx, ry, rw, rh, rr))); if (cw >= 1) break; }
-    if (cw > 0) col = mix(WHITE, col, cw);
-    for (const [cx, cy, r, c] of DOTS) { const cv = cover(sdCircle(px, py, cx, cy, r)); if (cv > 0) col = mix(c, col, cv); }
-    for (const [bx, by, bw, bh, br, c] of BARS) { const cv = cover(sdRoundRect(px, py, bx, by, bw, bh, br)); if (cv > 0) col = mix(c, col, cv); }
+    const px = (x + 0.5) / s, py = (y + 0.5) / s;          // design space
+    const qx = (px - 512) / SCALE + ART_CX;                 // artwork space
+    const qy = (py - 512) / SCALE + ART_CY;
+
+    let col = lerp(TILE_TOP, TILE_BOT, py / 1024);          // full-bleed tile
+    let cv = cover(sdArc(qx, qy, RING));
+    if (cv > 0) col = mix(ringColour(qx, qy), col, cv);
+    for (const r of ROWS) {
+      cv = cover(sdCircle(qx, qy, BULLET.cx, r.cy, BULLET.r));
+      if (cv > 0) col = mix(r.col, col, cv);
+      cv = cover(sdRoundRect(qx, qy, BAR.x, r.cy - BAR.h / 2, BAR.w, BAR.h, BAR.rx));
+      if (cv > 0) col = mix(r.col, col, cv);
+    }
+    cv = cover(sdSegment(qx, qy, TAIL.ax, TAIL.ay, TAIL.bx, TAIL.by, TAIL.hw));
+    if (cv > 0) col = mix(PURPLE, col, cv);                 // the tail sits on top
     return col;
   });
 }

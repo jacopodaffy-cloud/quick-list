@@ -1202,3 +1202,21 @@ body.view-home #scrollbar {
 
 /* currency select inside the budget form */
 .field-ccy { flex: 0 0 92px; max-width: 92px; }
+
+/* ============================================================ first-run tour */
+.tour { text-align: center; padding: 2px 2px 4px; --c: #5A63E0; --on: #fff; }
+.tour-ic {
+  width: 64px; height: 64px; border-radius: 20px;
+  display: inline-grid; place-items: center; margin-bottom: 12px;
+  background: color-mix(in srgb, var(--c) 14%, var(--surface));
+  color: var(--c);
+}
+.tour-ic svg { width: 30px; height: 30px; }
+.tour .sheet-title { margin-bottom: 6px; }
+.tour-body { font-size: 14.5px; line-height: 1.5; color: var(--ink-2); margin: 0 auto 16px; max-width: 34ch; }
+.tour-dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 16px; }
+.tour-dots i {
+  width: 7px; height: 7px; border-radius: 99px; background: var(--line-2);
+  transition: width .25s var(--ease-out), background .25s;
+}
+.tour-dots i.on { width: 20px; background: var(--c); }

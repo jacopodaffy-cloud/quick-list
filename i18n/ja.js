@@ -283,5 +283,18 @@ I18N.register('ja', {
   "Every item price × its quantity.": "各アイテムの価格 × 数量。",
   "What you have already ticked off.": "すでにチェックした分。",
   "Tip: type the price with the item — “Milk 2.50”.": "ヒント: 価格をアイテムと一緒に入力 — 「牛乳 2.50」。",
-  "Counts towards the list total.": "リストの合計に加算されます。"
+  "Counts towards the list total.": "リストの合計に加算されます。",
+
+  /* ---- first-run tutorial ---- */
+  "Every list is a colour": "リストは色で見分ける",
+  "Tap “New list” and pick a colour. No folders, no categories — the colour is how you spot it.": "「新しいリスト」をタップして色を選びます。フォルダも分類もなし — 色が目印です。",
+  "Add things fast": "すばやく追加",
+  "Type it, paste a whole list at once, or tap the mic and say it. “Milk x2” sets the quantity, “Milk 2.50” sets the price.": "入力するか、リストごと貼り付けるか、マイクをタップして話すだけ。「牛乳 x2」で数量、「牛乳 2.50」で価格が入ります。",
+  "Organise as you go": "進めながら整理",
+  "Check things off, hold the grip to reorder, and add a priority, a due date or a reminder from the toolbar.": "チェックを付け、グリップを長押しして並べ替え、ツールバーから優先度・期限・リマインダーを設定できます。",
+  "Budgets and sharing": "予算と共有",
+  "Prices add up against a budget while you shop. Share a list on WhatsApp, or let someone join it with a code.": "買い物中に価格が予算に加算されます。WhatsAppで共有したり、コードで参加してもらえます。",
+  "Next": "次へ",
+  "Skip": "スキップ",
+  "Start using QuickList": "QuickListを使い始める"
 });

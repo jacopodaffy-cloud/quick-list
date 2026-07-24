@@ -281,5 +281,18 @@ I18N.register('pt-BR', {
   "Every item price × its quantity.": "O preço de cada item × a quantidade.",
   "What you have already ticked off.": "O que você já marcou.",
   "Tip: type the price with the item — “Milk 2.50”.": "Dica: escreva o preço junto ao item — “Leite 2,50”.",
-  "Counts towards the list total.": "Conta no total da lista."
+  "Counts towards the list total.": "Conta no total da lista.",
+
+  /* ---- first-run tutorial ---- */
+  "Every list is a colour": "Cada lista é uma cor",
+  "Tap “New list” and pick a colour. No folders, no categories — the colour is how you spot it.": "Toque em “Nova lista” e escolha uma cor. Sem pastas, sem categorias — a cor é como você reconhece.",
+  "Add things fast": "Adicione rapidinho",
+  "Type it, paste a whole list at once, or tap the mic and say it. “Milk x2” sets the quantity, “Milk 2.50” sets the price.": "Digite, cole uma lista inteira de uma vez ou toque no microfone e fale. “Leite x2” define a quantidade, “Leite 2,50” o preço.",
+  "Organise as you go": "Organize enquanto usa",
+  "Check things off, hold the grip to reorder, and add a priority, a due date or a reminder from the toolbar.": "Marque itens, segure a alça para reordenar e adicione prioridade, prazo ou lembrete pela barra.",
+  "Budgets and sharing": "Orçamentos e compartilhar",
+  "Prices add up against a budget while you shop. Share a list on WhatsApp, or let someone join it with a code.": "Os preços somam no orçamento enquanto você compra. Compartilhe no WhatsApp ou deixe alguém entrar com um código.",
+  "Next": "Avançar",
+  "Skip": "Pular",
+  "Start using QuickList": "Começar a usar o QuickList"
 });

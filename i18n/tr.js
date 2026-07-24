@@ -283,5 +283,18 @@ I18N.register('tr', {
   "Every item price × its quantity.": "Her öğenin fiyatı × adedi.",
   "What you have already ticked off.": "Zaten işaretlediklerin.",
   "Tip: type the price with the item — “Milk 2.50”.": "İpucu: fiyatı öğeyle birlikte yaz — “Süt 2,50”.",
-  "Counts towards the list total.": "Liste toplamına dahil edilir."
+  "Counts towards the list total.": "Liste toplamına dahil edilir.",
+
+  /* ---- first-run tutorial ---- */
+  "Every list is a colour": "Her liste bir renktir",
+  "Tap “New list” and pick a colour. No folders, no categories — the colour is how you spot it.": "“Yeni liste”ye dokun ve bir renk seç. Klasör yok, kategori yok — onu renginden tanırsın.",
+  "Add things fast": "Hızlıca ekle",
+  "Type it, paste a whole list at once, or tap the mic and say it. “Milk x2” sets the quantity, “Milk 2.50” sets the price.": "Yaz, koca bir listeyi tek seferde yapıştır ya da mikrofona dokunup söyle. “Süt x2” adedi, “Süt 2,50” fiyatı ayarlar.",
+  "Organise as you go": "İlerledikçe düzenle",
+  "Check things off, hold the grip to reorder, and add a priority, a due date or a reminder from the toolbar.": "Öğeleri işaretle, sıralamak için tutamacı basılı tut ve çubuktan öncelik, tarih veya hatırlatıcı ekle.",
+  "Budgets and sharing": "Bütçe ve paylaşım",
+  "Prices add up against a budget while you shop. Share a list on WhatsApp, or let someone join it with a code.": "Alışveriş ederken fiyatlar bütçende toplanır. Listeyi WhatsApp’ta paylaş ya da kodla katılmalarını sağla.",
+  "Next": "İleri",
+  "Skip": "Atla",
+  "Start using QuickList": "QuickList’i kullanmaya başla"
 });
