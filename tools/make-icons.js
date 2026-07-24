@@ -3,11 +3,11 @@
    Run from the quicklist folder:  node tools/make-icons.js
 
    The artwork uses the SAME coordinates as icon.svg / icon-maskable.svg (a
-   1024-unit space, authored around the artwork centre 514.5,589.75), so the
+   1024-unit space, authored around the artwork centre 506.5,547.2), so the
    raster PNGs and the vector icons stay identical. Shapes are rendered from
    signed-distance functions, which gives clean anti-aliasing at every size.
 
-   These PNGs are full-bleed and use the MASKABLE scale (0.8), matching
+   These PNGs are full-bleed and use the MASKABLE scale (0.78), matching
    icon-maskable.svg: they are tagged maskable in the manifest and are the
    source that tools/gen_icons.py resizes into the Android launcher icons. */
 const zlib = require('zlib');
@@ -45,30 +45,30 @@ function png(size, draw) {
 }
 
 /* ---- palette (matches icon.svg) ---- */
-const RED = [0xF4, 0x51, 0x5E], ORANGE = [0xFC, 0xA0, 0x19], BLUE = [0x1E, 0x6F, 0xF5], PURPLE = [0x7A, 0x4C, 0xF0];
+const RED = [0xF4, 0x51, 0x5E], ORANGE = [0xFB, 0xA0, 0x1C], BLUE = [0x2F, 0x6B, 0xF6], PURPLE = [0x7A, 0x4C, 0xF0];
 const TILE_TOP = [0xFF, 0xFF, 0xFF], TILE_BOT = [0xF1, 0xF4, 0xF8];
 // mix(a, b, t) = a·t + b·(1−t)  → returns `a` at t=1, `b` at t=0
 const mix = (a, b, t) => [Math.round(a[0] * t + b[0] * (1 - t)), Math.round(a[1] * t + b[1] * (1 - t)), Math.round(a[2] * t + b[2] * (1 - t))];
 const lerp = (a, b, t) => mix(b, a, t);   // plain a→b interpolation
 
 /* ---- geometry, in artwork space (identical to the SVG) ---- */
-const ART_CX = 514.5, ART_CY = 589.75;     // artwork centre
-const SCALE = 0.8;                          // maskable scale, as icon-maskable.svg
-const RING = { cx: 546, cy: 534, r: 265.5, hw: 53.5, a0: 215, sweep: 292 };
-const TAIL = { ax: 594, ay: 713, bx: 786, by: 905, hw: 59.5 };
+const ART_CX = 506.5, ART_CY = 547.2;      // artwork bounding-box centre
+const SCALE = 0.78;                         // maskable scale, as icon-maskable.svg
+const RING = { cx: 470, cy: 526, r: 332, hw: 53.5, a0: 222.8, sweep: 271.9 };
+const TAIL = { ax: 585.2, ay: 703.5, bx: 776.5, by: 894.8, hw: 59 };
 const ROWS = [
-  { cy: 416, col: RED }, { cy: 524, col: ORANGE }, { cy: 634, col: BLUE },
+  { cy: 408.5, col: RED }, { cy: 515.4, col: ORANGE }, { cy: 624.6, col: BLUE },
 ];
-const BULLET = { cx: 198, r: 34 };
-const BAR = { x: 277, w: 277, h: 54, rx: 27 };
+const BULLET = { cx: 191, r: 34 };
+const BAR = { x: 270, w: 276, h: 54, rx: 27 };
 /* The Q's colour sweeps around the arc, which a single linear gradient cannot
    do (it would go muddy where red and blue meet on the right). Both the SVG and
    this renderer therefore use TWO linear gradients over the same arc, split at
    ~42.5° and overlapping, so the join lands on orange in both and is invisible.
    Keep these in step with the <linearGradient> pairs in icon.svg. */
-const GRAD_A = { ax: 328.5, ay: 381.7, bx: 733.7, by: 721.7, from: RED, to: ORANGE };
-const GRAD_B = { ax: 749.4, ay: 704.7, bx: 480, by: 790, from: ORANGE, to: BLUE };
-const SPLIT = 187.5;   // degrees along the sweep where segment B takes over
+const GRAD_A = { ax: 226.4, ay: 300.4, bx: 693.1, by: 771.9, from: RED, to: ORANGE, hold: 0.75 };
+const GRAD_B = { ax: 713.6, ay: 751.6, bx: 430, by: 790, from: ORANGE, to: BLUE };
+const SPLIT = 182.5;   // degrees along the sweep where segment B takes over
 
 /* Signed distances (negative = inside). */
 function sdRoundRect(px, py, x, y, w, h, r) {
@@ -99,7 +99,9 @@ function sdArc(px, py, a) {
 function gradAt(px, py, g) {
   const vx = g.bx - g.ax, vy = g.by - g.ay;
   let t = ((px - g.ax) * vx + (py - g.ay) * vy) / (vx * vx + vy * vy);
-  return lerp(g.from, g.to, Math.max(0, Math.min(1, t)));
+  t = Math.max(0, Math.min(1, t));
+  if (g.hold) t = Math.min(1, t / g.hold);   // reach `to` early, then hold it
+  return lerp(g.from, g.to, t);
 }
 /* Which of the two gradients applies depends on how far round the sweep the
    point sits — that is what makes the result read as a conic sweep. */

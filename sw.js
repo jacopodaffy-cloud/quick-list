@@ -1,12 +1,12 @@
 /* QuickList service worker — network-first with offline fallback */
-const CACHE = 'quicklist-v62';
-const ASSETS = ['./', './index.html', './theme.js?v=60', './config.js?v=60', './i18n.js?v=60', './app.css?v=60', './app.js?v=60', './manifest.webmanifest', './icon.svg', './icon-maskable.svg', './icon-192.png', './icon-512.png'];
+const CACHE = 'quicklist-v63';
+const ASSETS = ['./', './index.html', './theme.js?v=61', './config.js?v=61', './i18n.js?v=61', './app.css?v=61', './app.js?v=61', './manifest.webmanifest', './icon.svg', './icon-maskable.svg', './icon-192.png', './icon-512.png'];
 /* Translation resource files. Precached so switching language still works
    offline, but added BEST-EFFORT: addAll() is atomic, so a single missing
    locale would fail the whole install and leave the app with no service
    worker at all. Each locale is allowed to fail on its own instead. */
 const LOCALES = ['it', 'es', 'fr', 'de', 'pt-BR', 'nl', 'pl', 'ru', 'tr', 'zh-Hans', 'ja', 'ar', 'hi']
-  .map(c => './i18n/' + c + '.js?v=60');
+  .map(c => './i18n/' + c + '.js?v=61');
 
 self.addEventListener('install', e => {
   e.waitUntil(
